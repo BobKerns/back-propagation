@@ -326,26 +326,54 @@ class Network:
         for layer in self.layers:
             ax.annotate(layer.label, (layer.position * x_scale + layer_x_offset, layer_y_offset))
         for layer in self.layers[0:-1]:
-            ax.annotate('Bias', ((layer.position + 0.5)/ x_scale + layer_x_offset, layer_y_offset),
+            ax.annotate('Bias', ((layer.position + 0.5) * x_scale + layer_x_offset, layer_y_offset),
                         color='green')
         plt.show()
 
-    def evaluate(self, input: np.array, /) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
+    def show(self, label: str):
+        self.draw(label=label)
+        return label
+    def evaluate(self, input: np.array, /, *,
+                 epoch: Optional[int] = None
+                 ) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
         """
         Evaluate the network for a given input.
         """
         layer = self.layers[0]
         layer.values = input
-        self.draw(label=f'Forward: {layer.label}')
-        yield layer.label
+        epoch_label = '' if epoch is None else f'Epoch: {epoch} '
+        yield self.show(label=f'{epoch_label}{layer.label}: {''.join(map(repr, layer.values))}')
         for layer in self.layers[1:]:
             for node in layer.real_nodes:
                 node.value = sum(edge.weight * edge.previous.value for f, t, edge in self.graph.in_edges(node, data='edge'))
                 node.value = node.activation(node.value)
-            self.draw(label=f'Forward: {layer.label}')
-            yield layer.label
-        return self.layers[-1].label
+            yield self.show(label=f'{epoch_label}Forward: {layer.label}')
+        yield self.output_layer.values
 
+    def train_one(self, input: np.array, expected: np.array, /, *,
+                  epoch:int = 0
+                  ) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
+        """
+        Train the network for a given input and expected output.
+        """
+        # Forward pass
+        yield from self.evaluate(input, epoch=epoch)
+        # Backward pass
+        layer = self.layers[-1]
+        yield self.show(label=f'Epoch: {epoch} Backward: {layer.label}')
+        for layer in reversed(self.layers[0:-1]):
+            for node in layer.real_nodes:
+                node.value = sum(edge.weight * edge.next.value for f, t, edge in self.graph.out_edges(node, data='edge'))
+                node.value *= node.value
+
+    def train(self, data: np.array, /, *, epochs: int=1000, learning_rate: float=0.1):
+        """
+        Train the network for a given set of data.
+        """
+        for epoch in range(epochs):
+            for input, expected in data:
+                yield from self.train_one(input, expected, epoch=epoch)
+            yield self.show(label=f'Epoch: {epoch}')
     @property
     def input_layer(self):
         return self.layers[0]

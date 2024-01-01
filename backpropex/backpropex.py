@@ -376,8 +376,10 @@ class Network:
             yield self.show(label=f'Epoch: {epoch}')
     @property
     def input_layer(self):
+        """The input layer of this network."""
         return self.layers[0]
 
     @property
     def output_layer(self):
+        """The output layer of this network."""
         return self.layers[-1]

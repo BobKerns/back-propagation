@@ -6,7 +6,7 @@ import math
 from matplotlib.colors import Colormap
 
 import numpy as np
-from networkx import DiGraph, draw_networkx
+from networkx import DiGraph, draw_networkx, draw_networkx_nodes, draw_networkx_edges, draw_networkx_labels
 from matplotlib import colormaps
 import matplotlib.pyplot as plt
 
@@ -264,31 +264,40 @@ class Network:
                        edgecolors='black',
                        font_color='black',
                        **kwargs):
-            draw_networkx(self.graph, self.positions,
+            draw_networkx_nodes(self.graph, self.positions,
                                 nodelist=nodelist,
-                                labels=self.labels,
                                 node_size=node_size,
                                 node_color=[n.value for n in nodelist],
                                 vmin=-2.5, vmax=2.5,
-                                cmap=colormaps.get_cmap('coolwarm'),
+                                cmap=coolwarm,
                                 edgecolors=edgecolors,
-                                edge_color=self.edge_colors,
-                                edge_cmap=colormaps.get_cmap('coolwarm'),
-                                edge_vmin=-1, edge_vmax=1,
                                 label=label,
-                                font_color=font_color,
                                 ax=ax,
                                 **kwargs)
+            for node in nodelist:
+                pos_x, pos_y = self.positions[node]
+                if node.is_bias:
+                    pos = (pos_x - 0.004, pos_y - 8)
+                else:
+                    pos = (pos_x - 0.013, pos_y - 8)
+                ax.annotate(node.label, pos,
+                            color=font_color)
         regular_nodes = [node for node in self.graph.nodes if not node.is_bias]
         bias_nodes = [node for node in self.graph.nodes if node.is_bias]
+        # Draw the regular nodes first
+        draw_nodes(regular_nodes)
         # Draw the bias nodes distinctively differently.
         draw_nodes(bias_nodes,
                    node_shape='s',
                    node_size=500,
                    linewidths=2.0,
                    edgecolors='green',
-                   font_color='red')
-        draw_nodes(regular_nodes)
+                   font_color='green')
+        draw_networkx_edges(self.graph, self.positions,
+                            edge_color=self.edge_colors,
+                            edge_cmap=coolwarm,
+                            edge_vmin=-1, edge_vmax=1,
+                            ax=ax)
         ax.set_title(label)
         positions = self.positions
         # Offsets along the edge to avoid overlapping labels

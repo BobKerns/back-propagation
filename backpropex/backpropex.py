@@ -1,8 +1,8 @@
 from collections.abc import Sequence
+from enum import Enum
 from typing import Callable, Optional
 from functools import cached_property
 import math
-import random
 
 import numpy as np
 from networkx import DiGraph, draw_networkx
@@ -18,6 +18,14 @@ def ReLU(x: float) -> float:
 def softmax(x: float) -> float:
     """The standard softmax activation function."""
     return 1.0 / (1.0 + math.exp(-x))
+
+class LayerType(Enum):
+    """
+    The type of a layer in a neural network.
+    """
+    Input = 0
+    Hidden = 1
+    Output = 2
 
 class LossFunction:
     """
@@ -41,11 +49,17 @@ class Node:
     activation: ActivationFunction
     # The graphical logical position of this node in the network.
     position: tuple[float, float]
+
+    is_bias: bool = False
     def __init__(self, position: tuple[int, int], /, *,
-                 activation_function: ActivationFunction=ReLU):
+                 activation_function: ActivationFunction=ReLU,
+                 is_bias: bool=False):
         self.position = position
         # The function which calculates this node's value
         self.activation = activation_function
+        self.is_bias = is_bias
+        if is_bias:
+            self.value = 1.0
 
     @property
     def label(self) -> setattr:
@@ -77,10 +91,14 @@ class Layer:
     # Bias node for this layer (always the first node)
     bias: Node
 
+    layer_type: LayerType
+
     def __init__(self, nodes: int, /, *,
                  position: int = 0,
                  activation_function: ActivationFunction=ReLU,
-                 max_layer_size: int=10):
+                 max_layer_size: int=10,
+                 layer_type: LayerType=LayerType.Hidden
+                 ):
         """
         A set of nodes constituting one layer in a neural network.
 
@@ -92,11 +110,31 @@ class Layer:
         """
         self.position = position
         offset = (max_layer_size - nodes) / 2
-        self.bias = Node((self.position, offset), activation_function=activation_function)
-        def node(position: int):
-            pos = (self.position, position + 1 + offset)
-            return Node(pos, activation_function=activation_function)
-        self.nodes = [self.bias] + [node(position) for position in range(nodes)]
+        self.layer_type = layer_type
+        positions = iter(range(0, nodes + 1))
+        match layer_type:
+            case LayerType.Input | LayerType.Hidden:
+                offset = (max_layer_size - nodes) / 2
+            case LayerType.Output:
+                offset = (max_layer_size - nodes + 1) / 2
+        def node(**kwargs):
+            position = next(positions)
+            pos = (self.position, position + offset)
+            return Node(pos, activation_function=activation_function, **kwargs)
+        bias = []
+        match layer_type:
+            case LayerType.Input | LayerType.Hidden:
+                self.bias = node(is_bias=True)
+                bias = [self.bias]
+        self.nodes = bias + [node() for _ in range(nodes)]
+
+    @property
+    def real_nodes(self):
+        match self.layer_type:
+            case LayerType.Input | LayerType.Hidden:
+                return self.nodes[1:]
+            case LayerType.Output:
+                return self.nodes
 
     @property
     def values(self):
@@ -114,9 +152,12 @@ class Network:
     layers: Sequence[Layer]
     loss_function: Callable[[float], float]
     graph: DiGraph = DiGraph()
+    margin: float
+    max_layer_size: int
     def __init__(self, *layers: int,
                  loss_function: LossFunction=LossFunction(),
-                 activation_functions: Sequence[ActivationFunction]=None):
+                 activation_functions: Sequence[ActivationFunction]=None,
+                 margin: float=100.0):
         """
         A neural network.
 
@@ -124,10 +165,25 @@ class Network:
         :param loss_function: The loss function for this network.
         :param activation_functions: The activation function for each layer.
         """
+        self.margin = margin
         if activation_functions is None:
             activation_functions = [ReLU] * (len(layers) - 1) + [softmax]
+        self.max_layer_size = max(layers)
+        def layer_type(idx: int):
+            match idx:
+                case 0:
+                    return LayerType.Input
+                case _ if idx == len(layers) - 1:
+                    return LayerType.Output
+                case _:
+                    return LayerType.Hidden
+
         self.layers = [
-            Layer(nodes, position=idx, activation_function=activation_function)
+            Layer(nodes,
+                  position=idx,
+                  activation_function=activation_function,
+                  max_layer_size=self.max_layer_size,
+                  layer_type=layer_type(idx))
             for nodes, activation_function, idx
             in zip(layers, activation_functions, range(len(layers)))
         ]
@@ -152,7 +208,7 @@ class Network:
         # Initialize the edge weights by He-et-al initialization
         w = np.random.randn(nsize, psize) * np.sqrt(2 / psize)
         for (pidx, node) in enumerate(prev.nodes):
-            for (nidx, next_node) in enumerate(next.nodes):
+            for (nidx, next_node) in enumerate(next.real_nodes):
                 edge = Edge(node, next_node, initial_weight=w[nidx][pidx])
                 self.graph.add_edge(node, next_node, edge=edge)
 
@@ -164,12 +220,12 @@ class Network:
     def positions(self):
         def place(node: Node):
             pos = node.position
-            return (pos[0] * 100, pos[1] * 100)
+            return (pos[0] * 100, pos[1] * 100 + self.margin)
         return {node: place(node) for node in self.graph.nodes}
 
     @property
     def node_colors(self):
-        return [node.value for node in self.graph.nodes]
+        return [0 if node.is_bias else node.value for node in self.graph.nodes]
 
     @property
     def edge_colors(self):
@@ -183,22 +239,26 @@ class Network:
         """
         Draw the network using matplotlib.
         """
+        plt.close()
         fig, ax = plt.subplots()
-        positions = self.positions
-        for f, t, edge in self.edges:
-            loc1 = positions[f]
-            loc2 = positions[t]
-            loc = (loc1[0] * 0.8 + loc2[0] * 0.2), (loc1[1] * 0.75 + loc2[1] * 0.25 - 0)
-            ax.annotate(f'{edge.weight:.2f}',loc)
+        ax.set_ylim(25, self.max_layer_size * 100 + self.margin + 50)
         draw_networkx(self.graph, self.positions,
                             labels=self.labels,
                             node_size=1000,
                             node_color=self.node_colors,
                             vmin=-1, vmax=1,
                             cmap=colormaps.get_cmap('coolwarm'),
+                            edgecolors=['blue' if node.is_bias else 'black' for node in self.graph.nodes],
                             edge_color=self.edge_colors,
                             edge_cmap=colormaps.get_cmap('coolwarm'),
                             edge_vmin=-1, edge_vmax=1,
                             ax=ax)
-
+        positions = self.positions
+        for f, t, edge in self.edges:
+            loc1 = positions[f]
+            loc2 = positions[t]
+            loc = (loc1[0] * 0.8 + loc2[0] * 0.2), (loc1[1] * 0.75 + loc2[1] * 0.25 - 0)
+            ax.annotate(f'{edge.weight:.2f}',loc)
+        for layer in self.layers:
+            ax.annotate(layer.label, (layer.position * 100 - 10, 50))
         plt.show()

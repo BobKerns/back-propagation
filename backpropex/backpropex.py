@@ -225,7 +225,8 @@ class Network:
     def positions(self):
         def place(node: Node):
             pos = node.position
-            return (pos[0] / len(self.layers) + 0.1, pos[1] * 250 + self.margin)
+            offset = 0.5 / len(self.layers) if node.is_bias else 0.0
+            return (pos[0] / len(self.layers) + 0.1 + offset, pos[1] * 250 + self.margin)
         return {node: place(node) for node in self.graph.nodes}
 
     @property

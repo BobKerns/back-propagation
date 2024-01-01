@@ -1,8 +1,9 @@
 from collections.abc import Sequence
 from enum import Enum
-from typing import Callable, Optional
+from typing import Any, Callable, Generator, Optional
 from functools import cached_property
 import math
+from matplotlib.colors import Colormap
 
 import numpy as np
 from networkx import DiGraph, draw_networkx
@@ -138,11 +139,11 @@ class Layer:
 
     @property
     def values(self):
-        return np.array((n.value for n in self.nodes))
+        return [n.value for n in self.real_nodes]
 
     @values.setter
-    def values(self, values: np.array):
-        for node, value in zip(self.nodes, values):
+    def values(self, values: list[float]):
+        for node, value in zip(self.real_nodes, values):
             node.value = value
 
 class Network:
@@ -157,7 +158,7 @@ class Network:
     def __init__(self, *layers: int,
                  loss_function: LossFunction=LossFunction(),
                  activation_functions: Sequence[ActivationFunction]=None,
-                 margin: float=100.0):
+                 margin: float=200.0):
         """
         A neural network.
 
@@ -220,45 +221,79 @@ class Network:
     def positions(self):
         def place(node: Node):
             pos = node.position
-            return (pos[0] * 100, pos[1] * 100 + self.margin)
+            return (pos[0] / len(self.layers) + 0.1, pos[1] * 250 + self.margin)
         return {node: place(node) for node in self.graph.nodes}
 
     @property
     def node_colors(self):
-        return [0 if node.is_bias else node.value for node in self.graph.nodes]
+        return [node.value for node in self.graph.nodes]
 
     @property
     def edge_colors(self):
-        return [d['edge'].weight for (f, t, d) in self.graph.edges(data=True)]
+        return [edge.weight for (f, t, edge) in self.graph.edges(data='edge')]
 
     @property
     def edges(self):
-        return [(f, t, d['edge']) for (f, t, d) in self.graph.edges(data=True)]
+        return [(f, t, edge) for (f, t, edge) in self.graph.edges(data='edge')]
 
-    def draw(self):
+    def draw(self, /, *, label: str="Initial State"):
         """
         Draw the network using matplotlib.
         """
         plt.close()
-        fig, ax = plt.subplots()
-        ax.set_ylim(25, self.max_layer_size * 100 + self.margin + 50)
+        fig, ax = plt.subplots(figsize=(15, 10))
+        ax.set_autoscale_on(False)
+        top =self.max_layer_size * 250 + self.margin + 150
+        ax.set_ylim(25, top)
+        coolwarm: Colormap = colormaps.get_cmap('coolwarm'),
+        coolwarm = coolwarm[0]
         draw_networkx(self.graph, self.positions,
                             labels=self.labels,
                             node_size=1000,
                             node_color=self.node_colors,
-                            vmin=-1, vmax=1,
+                            vmin=-2.5, vmax=2.5,
                             cmap=colormaps.get_cmap('coolwarm'),
                             edgecolors=['blue' if node.is_bias else 'black' for node in self.graph.nodes],
                             edge_color=self.edge_colors,
                             edge_cmap=colormaps.get_cmap('coolwarm'),
                             edge_vmin=-1, edge_vmax=1,
+                            label=label,
                             ax=ax)
+        ax.set_title(label)
         positions = self.positions
-        for f, t, edge in self.edges:
+        shifts = (-0.05, 0.05, 0.075)
+        for idx, (f, t, edge) in enumerate(self.edges):
             loc1 = positions[f]
             loc2 = positions[t]
-            loc = (loc1[0] * 0.8 + loc2[0] * 0.2), (loc1[1] * 0.75 + loc2[1] * 0.25 - 0)
-            ax.annotate(f'{edge.weight:.2f}',loc)
+            shift = shifts[idx % len(shifts)]
+            loc = (loc1[0] *(0.8 + shift) + loc2[0] * (0.2 - shift)), (loc1[1] * (0.75 + shift) + loc2[1] * (0.25 - shift))
+            weight = edge.weight
+            color = coolwarm((weight + 1) / 2)
+            ax.annotate(f'{edge.weight:.2f}', loc, color=color)
         for layer in self.layers:
-            ax.annotate(layer.label, (layer.position * 100 - 10, 50))
+            ax.annotate(layer.label, (layer.position / len(self.layers) + 0.085, 75))
         plt.show()
+
+    def evaluate(self, input: np.array, /) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
+        """
+        Evaluate the network for a given input.
+        """
+        layer = self.layers[0]
+        layer.values = input
+        self.draw(label=f'Forward: {layer.label}')
+        yield layer.label
+        for layer in self.layers[1:]:
+            for node in layer.real_nodes:
+                node.value = sum(edge.weight * edge.previous.value for f, t, edge in self.graph.in_edges(node, data='edge'))
+                node.value = node.activation(node.value)
+            self.draw(label=f'Forward: {layer.label}')
+            yield layer.label
+        return self.layers[-1].label
+
+    @property
+    def input_layer(self):
+        return self.layers[0]
+
+    @property
+    def output_layer(self):
+        return self.layers[-1]

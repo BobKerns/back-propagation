@@ -1,11 +1,13 @@
 from collections.abc import Sequence
 from typing import Callable, Optional
+from functools import cached_property
 import math
 import random
 
 import numpy as np
 from networkx import DiGraph, draw_networkx
 from matplotlib import colormaps
+import matplotlib.pyplot as plt
 
 type ActivationFunction = Callable[[float], float]
 
@@ -158,7 +160,7 @@ class Network:
     def labels(self):
         return {node: node.label for node in self.graph.nodes}
 
-    @property
+    @cached_property
     def positions(self):
         def place(node: Node):
             pos = node.position
@@ -173,13 +175,30 @@ class Network:
     def edge_colors(self):
         return [d['edge'].weight for (f, t, d) in self.graph.edges(data=True)]
 
+    @property
+    def edges(self):
+        return [(f, t, d['edge']) for (f, t, d) in self.graph.edges(data=True)]
+
     def draw(self):
+        """
+        Draw the network using matplotlib.
+        """
+        fig, ax = plt.subplots()
+        positions = self.positions
+        for f, t, edge in self.edges:
+            loc1 = positions[f]
+            loc2 = positions[t]
+            loc = (loc1[0] * 0.8 + loc2[0] * 0.2), (loc1[1] * 0.75 + loc2[1] * 0.25 - 0)
+            ax.annotate(f'{edge.weight:.2f}',loc)
         draw_networkx(self.graph, self.positions,
-                      labels=self.labels,
-                      node_size=1000,
-                      node_color=self.node_colors,
-                      vmin=-1, vmax=1,
-                      cmap=colormaps.get_cmap('coolwarm'),
-                      edge_color=self.edge_colors,
-                      edge_cmap=colormaps.get_cmap('coolwarm'),
-                      edge_vmin=-1, edge_vmax=1)
+                            labels=self.labels,
+                            node_size=1000,
+                            node_color=self.node_colors,
+                            vmin=-1, vmax=1,
+                            cmap=colormaps.get_cmap('coolwarm'),
+                            edge_color=self.edge_colors,
+                            edge_cmap=colormaps.get_cmap('coolwarm'),
+                            edge_vmin=-1, edge_vmax=1,
+                            ax=ax)
+
+        plt.show()

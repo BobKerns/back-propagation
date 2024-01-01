@@ -20,6 +20,10 @@ def softmax(x: float) -> float:
     """The standard softmax activation function."""
     return 1.0 / (1.0 + math.exp(-x))
 
+def sigmoid(x: float) -> float:
+    """The standard sigmoid activation function."""
+    return 1.0 / (1.0 + math.exp(-x))
+
 class LayerType(Enum):
     """
     The type of a layer in a neural network.
@@ -168,7 +172,7 @@ class Network:
         """
         self.margin = margin
         if activation_functions is None:
-            activation_functions = [ReLU] * (len(layers) - 1) + [softmax]
+            activation_functions = [ReLU] * (len(layers) - 1) + [sigmoid]
         self.max_layer_size = max(layers)
         def layer_type(idx: int):
             match idx:

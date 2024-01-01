@@ -68,6 +68,9 @@ class Node:
 
     @property
     def label(self) -> setattr:
+        """The label for this node."""
+        if self.is_bias:
+            return "1"
         return f'{self.value:.2f}'
 
 class Edge:
@@ -87,6 +90,10 @@ class Edge:
         self.previous = previous
         self.next = next
         self.weight = initial_weight
+
+    @property
+    def label(self):
+        return f'{self.weight:.2f}'
 
 class Layer:
     # Label for this layer
@@ -219,7 +226,7 @@ class Network:
 
     @property
     def labels(self):
-        return {node: node.label for node in self.graph.nodes}
+        return {n: n.label for n in self.graph.nodes}
 
     @cached_property
     def positions(self):
@@ -239,7 +246,7 @@ class Network:
 
     @property
     def edges(self):
-        return [(f, t, edge) for (f, t, edge) in self.graph.edges(data='edge')]
+        return [edge for (f, t, edge) in self.graph.edges(data='edge')]
 
     def draw(self, /, *, label: str="Initial State"):
         """
@@ -252,31 +259,59 @@ class Network:
         ax.set_ylim(25, top)
         coolwarm: Colormap = colormaps.get_cmap('coolwarm'),
         coolwarm = coolwarm[0]
-        draw_networkx(self.graph, self.positions,
-                            labels=self.labels,
-                            node_size=1000,
-                            node_color=self.node_colors,
-                            vmin=-2.5, vmax=2.5,
-                            cmap=colormaps.get_cmap('coolwarm'),
-                            edgecolors=['blue' if node.is_bias else 'black' for node in self.graph.nodes],
-                            edge_color=self.edge_colors,
-                            edge_cmap=colormaps.get_cmap('coolwarm'),
-                            edge_vmin=-1, edge_vmax=1,
-                            label=label,
-                            ax=ax)
+        def draw_nodes(nodelist, /, *,
+                       node_size=1000,
+                       edgecolors='black',
+                       font_color='black',
+                       **kwargs):
+            draw_networkx(self.graph, self.positions,
+                                nodelist=nodelist,
+                                labels=self.labels,
+                                node_size=node_size,
+                                node_color=[n.value for n in nodelist],
+                                vmin=-2.5, vmax=2.5,
+                                cmap=colormaps.get_cmap('coolwarm'),
+                                edgecolors=edgecolors,
+                                edge_color=self.edge_colors,
+                                edge_cmap=colormaps.get_cmap('coolwarm'),
+                                edge_vmin=-1, edge_vmax=1,
+                                label=label,
+                                font_color=font_color,
+                                ax=ax,
+                                **kwargs)
+        regular_nodes = [node for node in self.graph.nodes if not node.is_bias]
+        bias_nodes = [node for node in self.graph.nodes if node.is_bias]
+        # Draw the bias nodes distinctively differently.
+        draw_nodes(bias_nodes,
+                   node_shape='s',
+                   node_size=500,
+                   linewidths=2.0,
+                   edgecolors='green',
+                   font_color='red')
+        draw_nodes(regular_nodes)
         ax.set_title(label)
         positions = self.positions
+        # Offsets along the edge to avoid overlapping labels
         shifts = (-0.05, 0.05, 0.075)
-        for idx, (f, t, edge) in enumerate(self.edges):
-            loc1 = positions[f]
-            loc2 = positions[t]
+        for idx, edge in enumerate(self.edges):
+            loc1 = positions[edge.previous]
+            loc2 = positions[edge.next]
+            # Choose the shift for the label to avoid conflicts
             shift = shifts[idx % len(shifts)]
-            loc = (loc1[0] *(0.8 + shift) + loc2[0] * (0.2 - shift)), (loc1[1] * (0.75 + shift) + loc2[1] * (0.25 - shift))
+            loc_x = loc1[0] *(0.8 + shift) + loc2[0] * (0.2 - shift)
+            loc_y = loc1[1] * (0.75 + shift) + loc2[1] * (0.25 - shift)
+            loc = loc_x, loc_y
+            #  Compute the color for the label based on the edge weight
+            #  This matches how the edge is colored
             weight = edge.weight
             color = coolwarm((weight + 1) / 2)
-            ax.annotate(f'{edge.weight:.2f}', loc, color=color)
+            ax.annotate(edge.label, loc, color=color)
+        # Label the layers on the graph
         for layer in self.layers:
             ax.annotate(layer.label, (layer.position / len(self.layers) + 0.085, 75))
+        for layer in self.layers[0:-1]:
+            ax.annotate('Bias', ((layer.position + 0.5)/ len(self.layers) + 0.085, 75),
+                        color='green')
         plt.show()
 
     def evaluate(self, input: np.array, /) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:

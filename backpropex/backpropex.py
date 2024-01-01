@@ -169,7 +169,7 @@ class Network:
     def __init__(self, *layers: int,
                  loss_function: LossFunction=LossFunction(),
                  activation_functions: Sequence[ActivationFunction]=None,
-                 margin: float=200.0):
+                 margin: float=0.13):
         """
         A neural network.
 
@@ -230,10 +230,13 @@ class Network:
 
     @cached_property
     def positions(self):
+        """Compute the positions of the nodes in the graph."""
+        xscale = 1.0 / len(self.layers)
+        yscale = 1.0 / (self.max_layer_size + 1)
         def place(node: Node):
             pos = node.position
-            offset = 0.5 / len(self.layers) if node.is_bias else 0.0
-            return (pos[0] / len(self.layers) + 0.1 + offset, pos[1] * 250 + self.margin)
+            offset = 0.5 * xscale if node.is_bias else 0.0
+            return (pos[0] * xscale+ 0.1 + offset, pos[1] * yscale + self.margin)
         return {node: place(node) for node in self.graph.nodes}
 
     @property
@@ -255,8 +258,8 @@ class Network:
         plt.close()
         fig, ax = plt.subplots(figsize=(15, 10))
         ax.set_autoscale_on(False)
-        top =self.max_layer_size * 250 + self.margin + 150
-        ax.set_ylim(25, top)
+        #top =self.max_layer_size * 250 + self.margin + 150
+        #ax.set_ylim(25, top)
         coolwarm: Colormap = colormaps.get_cmap('coolwarm'),
         coolwarm = coolwarm[0]
         def draw_nodes(nodelist, /, *,
@@ -274,12 +277,13 @@ class Network:
                                 label=label,
                                 ax=ax,
                                 **kwargs)
+            text_y_offset = 0.006
             for node in nodelist:
                 pos_x, pos_y = self.positions[node]
                 if node.is_bias:
-                    pos = (pos_x - 0.004, pos_y - 8)
+                    pos = (pos_x - 0.004, pos_y - text_y_offset)
                 else:
-                    pos = (pos_x - 0.013, pos_y - 8)
+                    pos = (pos_x - 0.013, pos_y - text_y_offset)
                 ax.annotate(node.label, pos,
                             color=font_color)
         regular_nodes = [node for node in self.graph.nodes if not node.is_bias]
@@ -316,10 +320,13 @@ class Network:
             color = coolwarm((weight + 1) / 2)
             ax.annotate(edge.label, loc, color=color)
         # Label the layers on the graph
+        layer_x_offset = 0.085
+        layer_y_offset = 0.05
+        x_scale = 1.0 / len(self.layers)
         for layer in self.layers:
-            ax.annotate(layer.label, (layer.position / len(self.layers) + 0.085, 75))
+            ax.annotate(layer.label, (layer.position * x_scale + layer_x_offset, layer_y_offset))
         for layer in self.layers[0:-1]:
-            ax.annotate('Bias', ((layer.position + 0.5)/ len(self.layers) + 0.085, 75),
+            ax.annotate('Bias', ((layer.position + 0.5)/ x_scale + layer_x_offset, layer_y_offset),
                         color='green')
         plt.show()
 

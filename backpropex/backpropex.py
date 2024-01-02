@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Generator, Optional
 from functools import cached_property
@@ -11,18 +12,48 @@ from matplotlib import colormaps
 import matplotlib.pyplot as plt
 
 type ActivationFunction = Callable[[float], float]
+type ActivationDerivative = Callable[[float], float]
+
+@dataclass
+class Activation:
+    """
+    An activation function and its derivative.
+    """
+    name: str
+    function: ActivationFunction
+    derivative: ActivationDerivative
+    def __call__(self, x: float) -> float:
+        return self.function(x)
 
 def ReLU(x: float) -> float:
     """The standard ReLU activation function."""
     return max(0.0, x)
 
+def ReLUDerivative(x: float) -> float:
+    """The derivative of the standard ReLU activation function."""
+    return 1.0 if x > 0.0 else 0.0
+
+ACT_ReLU = Activation('ReLU', ReLU, ReLUDerivative)
+
 def softmax(x: float) -> float:
     """The standard softmax activation function."""
     return 1.0 / (1.0 + math.exp(-x))
 
+def softmax_derivative(x: float) -> float:
+    """The derivative of the standard softmax activation function."""
+    return softmax(x) * (1.0 - softmax(x))
+
+ACT_Softmax = Activation('Softmax', softmax, softmax_derivative)
+
 def sigmoid(x: float) -> float:
     """The standard sigmoid activation function."""
     return 1.0 / (1.0 + math.exp(-x))
+
+def sigmoid_derivative(x: float) -> float:
+    """The derivative of the standard sigmoid activation function."""
+    return sigmoid(x) * (1.0 - sigmoid(x))
+
+ACT_Sigmoid = Activation('Sigmoid', sigmoid, sigmoid_derivative)
 
 class LayerType(Enum):
     """
@@ -51,17 +82,17 @@ class Node:
     # The value of this node.
     value: float = 0.0
     # The activation function for this node.
-    activation: ActivationFunction
+    activation: Activation
     # The graphical logical position of this node in the network.
     position: tuple[float, float]
 
     is_bias: bool = False
     def __init__(self, position: tuple[int, int], /, *,
-                 activation_function: ActivationFunction=ReLU,
+                 activation: Activation=ACT_ReLU,
                  is_bias: bool=False):
         self.position = position
         # The function which calculates this node's value
-        self.activation = activation_function
+        self.activation = activation
         self.is_bias = is_bias
         if is_bias:
             self.value = 1.0
@@ -107,7 +138,7 @@ class Layer:
 
     def __init__(self, nodes: int, /, *,
                  position: int = 0,
-                 activation_function: ActivationFunction=ReLU,
+                 activation: Activation=ACT_ReLU,
                  max_layer_size: int=10,
                  layer_type: LayerType=LayerType.Hidden
                  ):
@@ -132,7 +163,7 @@ class Layer:
         def node(**kwargs):
             position = next(positions)
             pos = (self.position, position + offset)
-            return Node(pos, activation_function=activation_function, **kwargs)
+            return Node(pos, activation=activation, **kwargs)
         bias = []
         match layer_type:
             case LayerType.Input | LayerType.Hidden:
@@ -168,7 +199,7 @@ class Network:
     max_layer_size: int
     def __init__(self, *layers: int,
                  loss_function: LossFunction=LossFunction(),
-                 activation_functions: Sequence[ActivationFunction]=None,
+                 activations: Sequence[Activation]=None,
                  margin: float=0.13):
         """
         A neural network.
@@ -178,8 +209,8 @@ class Network:
         :param activation_functions: The activation function for each layer.
         """
         self.margin = margin
-        if activation_functions is None:
-            activation_functions = [ReLU] * (len(layers) - 1) + [sigmoid]
+        if activations is None:
+            activations = [ACT_ReLU] * (len(layers) - 1) + [ACT_Sigmoid]
         self.max_layer_size = max(layers)
         def layer_type(idx: int):
             match idx:
@@ -193,11 +224,11 @@ class Network:
         self.layers = [
             Layer(nodes,
                   position=idx,
-                  activation_function=activation_function,
+                  activation=activation,
                   max_layer_size=self.max_layer_size,
                   layer_type=layer_type(idx))
-            for nodes, activation_function, idx
-            in zip(layers, activation_functions, range(len(layers)))
+            for nodes, activation, idx
+            in zip(layers, activations, range(len(layers)))
         ]
         self.loss_function = loss_function
         # Label the layers
@@ -236,6 +267,7 @@ class Network:
         def place(node: Node):
             pos = node.position
             offset = 0.5 * xscale if node.is_bias else 0.0
+
             return (pos[0] * xscale+ 0.1 + offset, pos[1] * yscale + self.margin)
         return {node: place(node) for node in self.graph.nodes}
 

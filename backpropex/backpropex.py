@@ -266,9 +266,9 @@ class Network:
         yscale = 1.0 / (self.max_layer_size + 1)
         def place(node: Node):
             pos = node.position
-            offset = 0.5 * xscale if node.is_bias else 0.0
-
-            return (pos[0] * xscale+ 0.1 + offset, pos[1] * yscale + self.margin)
+            xpos = pos[0] + 0.5 if node.is_bias else pos[0]
+            ypos = 0 if node.is_bias else pos[1]
+            return (xpos * xscale+ 0.1, ypos * yscale + self.margin)
         return {node: place(node) for node in self.graph.nodes}
 
     @property

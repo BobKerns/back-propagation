@@ -130,6 +130,7 @@ class Edge:
         return f'Edge({self.previous} -> {self.next})'
 
 class Layer:
+    """One layer in a neural network."""
     # Label for this layer
     label: str
     # Nodes in this layer
@@ -138,6 +139,12 @@ class Layer:
     bias: Node
 
     layer_type: LayerType
+
+    # The position of this layer in the network, with input = 0
+    position: int
+
+    # The activation function for nodes in this layer
+    activation: Activation
 
     def __init__(self, nodes: int, /, *,
                  position: int = 0,
@@ -158,6 +165,7 @@ class Layer:
         self.position = position
         offset = (max_layer_size - nodes) / 2
         self.layer_type = layer_type
+        self.activation = activation
         positions = iter(range(0, nodes + 1))
         match layer_type:
             case LayerType.Input | LayerType.Hidden:

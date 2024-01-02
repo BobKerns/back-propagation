@@ -14,7 +14,14 @@ from backpropex.layer import Layer, LayerType
 from backpropex.loss import LossFunction, MeanSquaredError
 from backpropex.node import Node
 
+def _ids():
+    """Generate unique ids."""
+    idx = 0
+    while True:
+        yield idx
+        idx += 1
 
+ids = _ids()
 class Network:
     """
     A neural network.
@@ -24,7 +31,9 @@ class Network:
     graph: DiGraph = DiGraph()
     margin: float
     max_layer_size: int
+    name: str
     def __init__(self, *layers: int,
+                 name: Optional[str] = None,
                  loss_function: LossFunction=MeanSquaredError,
                  activations: Sequence[ActivationFunction]=None,
                  margin: float=0.13,
@@ -42,6 +51,8 @@ class Network:
         if activations is None:
             activations = [ACT_ReLU] * (len(layers) - 1) + [ACT_Sigmoid]
         self.max_layer_size = max(layers)
+        self.name = name if name is not None else f'Network_{next(ids)}'
+
         def layer_type(idx: int):
             match idx:
                 case 0:
@@ -279,4 +290,4 @@ class Network:
         return len(self.layers)
 
     def __repr__(self):
-        return f'Network({",".join((str(len(l)) for l in self.layers))})'
+        return f'Network({",".join((str(len(l)) for l in self.layers))}, name={self.name})'

@@ -74,8 +74,7 @@ I have not verified this either.
 Etc.
 
 """
-
-from typing import Protocol
+from typing import Any, Protocol
 import numpy as np
 
 class LossFunction(Protocol):
@@ -84,501 +83,487 @@ class LossFunction(Protocol):
     """
     name: str
 
-    @classmethod
+    _registry: dict[str, 'LossFunction'] = {}
+    @staticmethod
+
+    def register(cls: 'LossFunction') -> None:
+        """
+        Register a new loss function.
+        """
+        LossFunction._registry[cls.name] = cls
+        return cls
+
+    @staticmethod
+
+    def names() -> list[str]:
+        """
+        Return a list of the names of all registered loss functions.
+        """
+        return list(LossFunction._registry.keys())
+
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         """
         Evaluate the cost function for a given set of actual and expected values.
         """
         ...
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         """
         Evaluate the derivative of the cost function for a given set of actual and expected values.
         """
         ...
 
-class MSE(LossFunction):
+    @classmethod
+
+    def __getattr__(cls, name: str) -> Any:
+        """
+        Allow accessing loss functions via attribute access.
+        """
+        return LossFunction._registry[name]
+
+    def __init_subclass__(cls) -> None:
+        if hasattr(cls, 'name'):
+            LossFunction.register(cls)
+        return super().__init_subclass__()
+
+class LossBase(LossFunction):
+    """Base class to allow defining LossFunction objects via class syntax."""
+
+    def derivative(cls, f : float) -> float:
+        """Evaluate the derivative of the cost function for a given set of actual and expected values."""
+        ...
+
+    def __new__(cls, actual: np.array, expected: np.array) -> float:
+        """Instead of instantiating, evaluate the cost function for a given set of actual and expected values."""
+        return cls.__call__(cls, actual, expected)
+
+    def __init_subclass__(cls) -> None:
+        """Wrap the derivative method to allow defining LossFunction objects via class syntax."""
+        sub = super().__init_subclass__()
+        derivative = cls.derivative
+        (sub or cls).derivative = lambda v, e: derivative(cls, v, e)
+        return sub
+
+class MSE(LossBase):
     """
     The mean squared error cost function.
     """
     name: str = 'MSE'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square(actual - expected)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 2 * (actual - expected) / len(actual)
 
-class CrossEntropy(LossFunction):
+class CrossEntropy(LossBase):
     """
     The cross entropy cost function.
     """
     name: str = 'CrossEntropy'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return -np.sum(expected * np.log(actual) + (1 - expected) * np.log(1 - actual)) / len(actual)
-    @classmethod
+
+
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return (actual - expected) / (actual * (1 - actual)) / len(actual)
 
-class BinaryCrossEntropy(LossFunction):
+
+class BinaryCrossEntropy(LossBase):
     """
     The binary cross entropy cost function.
     """
     name: str = 'BinaryCrossEntropy'
 
-    @classmethod
+
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return -np.sum(expected * np.log(actual) + (1 - expected) * np.log(1 - actual)) / len(actual)
+
 
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return (actual - expected) / (actual * (1 - actual)) / len(actual)
 
-class CategoricalCrossEntropy(LossFunction):
+class CategoricalCrossEntropy(LossBase):
     """
     The categorical cross entropy cost function.
     """
     name: str = 'CategoricalCrossEntropy'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return -np.sum(expected * np.log(actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class SparseCategoricalCrossEntropy(LossFunction):
+class SparseCategoricalCrossEntropy(LossBase):
     """
     The sparse categorical cross entropy cost function.
     """
     name: str = 'SparseCategoricalCrossEntropy'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return -np.sum(expected * np.log(actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergence(LossFunction):
+class KLDivergence(LossBase):
     """
     The Kullback-Leibler divergence cost function.
     """
     name: str = 'KLDivergence'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergenceBernoulli(LossFunction):
+class KLDivergenceBernoulli(LossBase):
     """
     The Kullback-Leibler divergence cost function for Bernoulli distributions.
     """
     name: str = 'KLDivergenceBernoulli'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual) + (1 - expected) * np.log((1 - expected) / (1 - actual))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual + (1 - expected) / (1 - actual) / len(actual)
 
-class KLDivergenceCategorical(LossFunction):
+class KLDivergenceCategorical(LossBase):
     """
     The Kullback-Leibler divergence cost function for categorical distributions.
     """
     name: str = 'KLDivergenceCategorical'
+
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual)) / len(actual)
 
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergenceGaussian(LossFunction):
+class KLDivergenceGaussian(LossBase):
     """
     The Kullback-Leibler divergence cost function for Gaussian distributions.
     """
     name: str = 'KLDivergenceGaussian'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.log(expected / actual) + (np.square(actual) + np.square(expected)) / 2) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergenceMultinomial(LossFunction):
+class KLDivergenceMultinomial(LossBase):
     """
     The Kullback-Leibler divergence cost function for multinomial distributions.
     """
     name: str = 'KLDivergenceMultinomial'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergencePoisson(LossFunction):
+class KLDivergencePoisson(LossBase):
     """
     The Kullback-Leibler divergence cost function for Poisson distributions.
     """
     name: str = 'KLDivergencePoisson'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual) - expected + actual) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual + 1 / len(actual)
 
-class KLDivergenceUniform(LossFunction):
+class KLDivergenceUniform(LossBase):
     """
     The Kullback-Leibler divergence cost function for uniform distributions.
     """
     name: str = 'KLDivergenceUniform'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.log(expected / actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergenceWeighted(LossFunction):
+class KLDivergenceWeighted(LossBase):
     """
     The weighted Kullback-Leibler divergence cost function.
     """
     name: str = 'KLDivergenceWeighted'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergenceWeightedBernoulli(LossFunction):
+class KLDivergenceWeightedBernoulli(LossBase):
     """
     The weighted Kullback-Leibler divergence cost function for Bernoulli distributions.
     """
     name: str = 'KLDivergenceWeightedBernoulli'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual) + (1 - expected) * np.log((1 - expected) / (1 - actual))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual + (1 - expected) / (1 - actual) / len(actual)
 
-class KLDivergenceWeightedCategorical(LossFunction):
+class KLDivergenceWeightedCategorical(LossBase):
     """
     The weighted Kullback-Leibler divergence cost function for categorical distributions.
     """
     name: str = 'KLDivergenceWeightedCategorical'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergenceWeightedGaussian(LossFunction):
+class KLDivergenceWeightedGaussian(LossBase):
     """
     The weighted Kullback-Leibler divergence cost function for Gaussian distributions.
     """
     name: str = 'KLDivergenceWeightedGaussian'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.log(expected / actual) + (np.square(actual) + np.square(expected)) / 2) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergenceWeightedMultinomial(LossFunction):
+class KLDivergenceWeightedMultinomial(LossBase):
     """
     The weighted Kullback-Leibler divergence cost function for multinomial distributions.
     """
     name: str = 'KLDivergenceWeightedMultinomial'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class KLDivergenceWeightedPoisson(LossFunction):
+class KLDivergenceWeightedPoisson(LossBase):
     """
     The weighted Kullback-Leibler divergence cost function for Poisson distributions.
     """
     name: str = 'KLDivergenceWeightedPoisson'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual) - expected + actual) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual + 1 / len(actual)
 
-class KLDivergenceWeightedUniform(LossFunction):
+class KLDivergenceWeightedUniform(LossBase):
     """
     The weighted Kullback-Leibler divergence cost function for uniform distributions.
     """
     name: str = 'KLDivergenceWeightedUniform'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.log(expected / actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class MeanAbsoluteError(LossFunction):
+class MeanAbsoluteError(LossBase):
     """
     The mean absolute error cost function.
     """
     name: str = 'MeanAbsoluteError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.abs(actual - expected)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return np.sign(actual - expected) / len(actual)
 
-class MeanAbsolutePercentageError(LossFunction):
+class MeanAbsolutePercentageError(LossBase):
     """
     The mean absolute percentage error cost function.
     """
     name: str = 'MeanAbsolutePercentageError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.abs(actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return np.sign(actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps) / len(actual)
 
-class MeanAbsoluteLogarithmicError(LossFunction):
+class MeanAbsoluteLogarithmicError(LossBase):
     """
     The mean absolute logarithmic error cost function.
     """
     name: str = 'MeanAbsoluteLogarithmicError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.abs(np.log(actual + 1) - np.log(expected + 1))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return np.sign(np.log(actual + 1) - np.log(expected + 1)) / (actual + 1) / len(actual)
 
-class MeanSquaredLogarithmicError(LossFunction):
+class MeanSquaredLogarithmicError(LossBase):
     """
     The mean squared logarithmic error cost function.
     """
     name: str = 'MeanSquaredLogarithmicError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square(np.log(actual + 1) - np.log(expected + 1))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 2 * (np.log(actual + 1) - np.log(expected + 1)) / (actual + 1) / len(actual)
 
-class MeanSquaredPercentageError(LossFunction):
+class MeanSquaredPercentageError(LossBase):
     """
     The mean squared percentage error cost function.
     """
     name: str = 'MeanSquaredPercentageError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square((actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 2 * (actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps) / len(actual)
 
-class MeanSquaredError(LossFunction):
+class MeanSquaredError(LossBase):
     """
     The mean squared error cost function.
     """
     name: str = 'MeanSquaredError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square(actual - expected)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 2 * (actual - expected) / len(actual)
 
-class MeanSquaredLogarithmicError(LossFunction):
+class MeanSquaredLogarithmicError(LossBase):
     """
     The mean squared logarithmic error cost function.
     """
     name: str = 'MeanSquaredLogarithmicError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square(np.log(actual + 1) - np.log(expected + 1))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 2 * (np.log(actual + 1) - np.log(expected + 1)) / (actual + 1) / len(actual)
 
-class MeanSquaredPercentageError(LossFunction):
+class MeanSquaredPercentageError(LossBase):
     """
     The mean squared percentage error cost function.
     """
     name: str = 'MeanSquaredPercentageError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square((actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 2 * (actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps) / len(actual)
 
-class MeanSquaredError(LossFunction):
+class MeanSquaredError(LossBase):
     """
     The mean squared error cost function.
     """
     name: str = 'MeanSquaredError'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square(actual - expected)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 2 * (actual - expected) / len(actual)
 
-class Poisson(LossFunction):
+class Poisson(LossBase):
     """
     The Poisson cost function.
     """
     name: str = 'Poisson'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(actual - expected * np.log(actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 1 - expected / actual / len(actual)
 
-class CosineSimilarity(LossFunction):
+class CosineSimilarity(LossBase):
     """
     The cosine similarity cost function.
     """
     name: str = 'CosineSimilarity'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(actual * expected) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return expected / len(actual)
 
-class Hinge(LossFunction):
+class Hinge(LossBase):
     """
     The hinge cost function.
     """
     name: str = 'Hinge'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.maximum(0, 1 - actual * expected)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / len(actual)
 
-class SquaredHinge(LossFunction):
+class SquaredHinge(LossBase):
     """
     The squared hinge cost function.
     """
     name: str = 'SquaredHinge'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square(np.maximum(0, 1 - actual * expected))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -2 * expected * np.maximum(0, 1 - actual * expected) / len(actual)
 
-class LogCosh(LossFunction):
+class LogCosh(LossBase):
     """
     The log cosh cost function.
     """
     name: str = 'LogCosh'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.log(np.cosh(actual - expected))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return np.tanh(actual - expected) / len(actual)
 
-class Huber(LossFunction):
+class Huber(LossBase):
     """
     The Huber cost function.
     """
     name: str = 'Huber'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.where(np.abs(actual - expected) < 1, 0.5 * np.square(actual - expected), np.abs(actual - expected) - 0.5)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return np.where(np.abs(actual - expected) < 1, actual - expected, np.sign(actual - expected)) / len(actual)
 
-class Log(LossFunction):
+class Log(LossBase):
     """
     The log cost function.
     """
     name: str = 'Log'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.log(1 + np.exp(-actual * expected))) / len(actual)
-
 
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / (1 + np.exp(actual * expected)) / len(actual)
@@ -590,6 +575,7 @@ class Quantile(LossFunction):
     """
     name: str = 'Quantile'
     q: float
+
     def __init__(self, q: float = 0.5):
         self.q = q
 
@@ -599,100 +585,86 @@ class Quantile(LossFunction):
     def derivative(self, actual: np.array, expected: np.array) -> np.array:
         return np.where(actual >= expected, self.q, 1 - self.q) / len(actual)
 
-class LogPoisson(LossFunction):
+class LogPoisson(LossBase):
     """
     The log Poisson cost function.
     """
     name: str = 'LogPoisson'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.exp(actual) - actual * expected) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return np.exp(actual) - expected / len(actual)
 
-class KLDivergenceGaussian(LossFunction):
+class KLDivergenceGaussian(LossBase):
     """
     The Kullback-Leibler divergence cost function for Gaussian distributions.
     """
     name: str = 'KLDivergenceGaussian'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.log(expected / actual) + (np.square(actual) + np.square(expected)) / 2) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual / len(actual)
 
-class PoissonNLL(LossFunction):
+class PoissonNLL(LossBase):
     """
     The Poisson negative log likelihood cost function.
     """
     name: str = 'PoissonNLL'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(actual - expected * np.log(actual)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 1 - expected / actual / len(actual)
 
-class KLDivergenceBernoulli(LossFunction):
+class KLDivergenceBernoulli(LossBase):
     """
     The Kullback-Leibler divergence cost function for Bernoulli distributions.
     """
     name: str = 'KLDivergenceBernoulli'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(expected * np.log(expected / actual) + (1 - expected) * np.log((1 - expected) / (1 - actual))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / actual + (1 - expected) / (1 - actual) / len(actual)
 
-class CategoricalHinge(LossFunction):
+class CategoricalHinge(LossBase):
     """
     The categorical hinge cost function.
     """
     name: str = 'CategoricalHinge'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.maximum(0, 1 - actual * expected)) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return -expected / len(actual)
 
-class SquaredLog(LossFunction):
+class SquaredLog(LossBase):
     """
     The squared log cost function.
     """
     name: str = 'SquaredLog'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.square(np.log(actual + 1) - np.log(expected + 1))) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return 2 * (np.log(actual + 1) - np.log(expected + 1)) / (actual + 1) / len(actual)
 
-class PoissonNLLLog(LossFunction):
+class PoissonNLLLog(LossBase):
     """
     The Poisson negative log likelihood cost function.
     """
     name: str = 'PoissonNLLLog'
 
-    @classmethod
     def __call__(cls, actual: np.array, expected: np.array) -> float:
         return np.sum(np.exp(actual) - actual * expected) / len(actual)
 
-    @classmethod
     def derivative(cls, actual: np.array, expected: np.array) -> np.array:
         return np.exp(actual) - expected / len(actual)

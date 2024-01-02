@@ -214,7 +214,7 @@ class Network:
     def show(self, label: str):
         self.draw(label=label)
         return label
-    def evaluate(self, input: np.array, /, *,
+    def __call__(self, input: np.array, /, *,
                  epoch: Optional[int] = None
                  ) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
         """
@@ -238,7 +238,7 @@ class Network:
         Train the network for a given input and expected output.
         """
         # Forward pass
-        yield from self.evaluate(input, epoch=epoch)
+        yield from self(input, epoch=epoch)
         # Backward pass
         layer = self.layers[-1]
         yield self.show(label=f'Epoch: {epoch} Backward: {layer.label}')

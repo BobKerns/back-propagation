@@ -85,17 +85,17 @@ class Node:
     activation: Activation
     # The graphical logical position of this node in the network.
     position: tuple[float, float]
+    # The name of this node. Primarily for output nodes.
+    name: Optional[str]
 
     is_bias: bool = False
     def __init__(self, position: tuple[int, int], /, *,
-                 activation: Activation=ACT_ReLU,
-                 is_bias: bool=False):
+                 is_bias: bool=False,
+                 name: Optional[str]=None):
         self.position = position
-        # The function which calculates this node's value
-        self.activation = activation
-        self.is_bias = is_bias
         if is_bias:
             self.value = 1.0
+        self.name = name
 
     @property
     def label(self) -> setattr:
@@ -140,7 +140,8 @@ class Layer:
                  position: int = 0,
                  activation: Activation=ACT_ReLU,
                  max_layer_size: int=10,
-                 layer_type: LayerType=LayerType.Hidden
+                 layer_type: LayerType=LayerType.Hidden,
+                 names: Optional[Sequence[str]]=None,
                  ):
         """
         A set of nodes constituting one layer in a neural network.
@@ -163,7 +164,8 @@ class Layer:
         def node(**kwargs):
             position = next(positions)
             pos = (self.position, position + offset)
-            return Node(pos, activation=activation, **kwargs)
+            name = None if names is None else names[idx]
+            return Node(pos, activation=activation, name=name, **kwargs)
         bias = []
         match layer_type:
             case LayerType.Input | LayerType.Hidden:
@@ -200,7 +202,10 @@ class Network:
     def __init__(self, *layers: int,
                  loss_function: LossFunction=LossFunction(),
                  activations: Sequence[Activation]=None,
-                 margin: float=0.13):
+                 margin: float=0.13,
+                 input_names: Optional[Sequence[str]]=None,
+                 output_names: Optional[Sequence[str]]=None,
+                 ):
         """
         A neural network.
 
@@ -221,12 +226,26 @@ class Network:
                 case _:
                     return LayerType.Hidden
 
+        def node_names(ltype: LayerType):
+            if ltype == LayerType.Input:
+                if input_names is None:
+                    return [f'In[{idx}]' for idx in range(layers[0])]
+                return input_names
+            if ltype == LayerType.Output:
+                if output_names is None:
+                    return [f'Out[{idx}]' for idx in range(layers[-1])]
+                return output_names
+            return None
+        def make_layer(idx: int, nodes: int, activation: Activation):
+            ltype = layer_type(idx)
+            return Layer(nodes,
+                    position=idx,
+                    activation=activation,
+                    max_layer_size=self.max_layer_size,
+                    names=node_names(ltype),
+                    layer_type=ltype)
         self.layers = [
-            Layer(nodes,
-                  position=idx,
-                  activation=activation,
-                  max_layer_size=self.max_layer_size,
-                  layer_type=layer_type(idx))
+            make_layer(idx, nodes, activation)
             for nodes, activation, idx
             in zip(layers, activations, range(len(layers)))
         ]
@@ -318,6 +337,9 @@ class Network:
                     pos = (pos_x - 0.013, pos_y - text_y_offset)
                 ax.annotate(node.label, pos,
                             color=font_color)
+                if node.name is not None:
+                    ax.annotate(node.name, (pos_x - 0.013, pos_y - text_y_offset - 0.04),
+                                color=font_color)
         regular_nodes = [node for node in self.graph.nodes if not node.is_bias]
         bias_nodes = [node for node in self.graph.nodes if node.is_bias]
         # Draw the regular nodes first

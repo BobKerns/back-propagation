@@ -190,6 +190,19 @@ class Layer:
         for node, value in zip(self.real_nodes, values):
             node.value = value
 
+    def __getitem__(self, idx: int|str):
+        """Get a node by index or name."""
+        if isinstance(idx, str):
+            for node in self.nodes:
+                if node.name == idx:
+                    return node
+            raise ValueError(f'No node with name {idx}')
+        return self.real_nodes[idx]
+
+    def __len__(self):
+        """The number of real nodes in this layer."""
+        return len(self.real_nodes)
+
 class Network:
     """
     A neural network.
@@ -437,3 +450,17 @@ class Network:
     def output_layer(self):
         """The output layer of this network."""
         return self.layers[-1]
+
+    @property
+    def hidden_layers(self):
+        """The hidden layers of this network."""
+        return self.layers[1:-1]
+
+    def __getitem__(self, idx: int):
+        """Get a layer by index."""
+        return self.layers[idx]
+
+    def __len__(self):
+        """The number of layers in this network."""
+        return len(self.layers)
+

@@ -81,28 +81,108 @@ class Node:
     """
     # The value of this node.
     value: float = 0.0
-    # The activation function for this node.
-    activation: Activation
     # The graphical logical position of this node in the network.
     position: tuple[float, float]
+    idx: int
+    layer: 'Layer'
     # The name of this node. Primarily for output nodes.
     name: Optional[str]
 
-    is_bias: bool = False
+    @property
+    def is_bias(self) -> bool:
+        """Is this node a bias node?"""
+        return False
+    
     def __init__(self, position: tuple[int, int], /, *,
-                 is_bias: bool=False,
+                 idx: int=-1,
+                 layer: 'Layer'=None,
                  name: Optional[str]=None):
         self.position = position
-        if is_bias:
-            self.value = 1.0
+        self.idx = idx if idx >= 0 else position[1]
+        self.layer = layer
         self.name = name
 
     @property
     def label(self) -> setattr:
         """The label for this node."""
-        if self.is_bias:
-            return "1"
         return f'{self.value:.2f}'
+
+class Input(Node):
+    """
+    An input node in the network.
+    """
+    def __init__(self, position: tuple[int, int], /, **kwargs):
+        super().__init__(position, **kwargs)
+
+    def __repr__(self) -> str:
+        return f'In[{self.idx}]={self.value:.2f}'
+
+class Hidden(Node):
+    """
+    An output node in the network.
+    """
+    # The activation function for this node.
+    activation: Activation
+    def __init__(self, position: tuple[int, int], /, *,
+                 activation: Activation=ACT_ReLU,
+                 **kwargs):
+        super().__init__(position, **kwargs)
+        self.activation = activation
+
+    def __repr__(self) -> str:
+        return f'Hidden[{self.layer.position},{self.idx}]={self.value:.2f}'
+
+class Output(Node):
+    """
+    An output node in the network.
+    """
+    # The activation function for this node.
+    activation: Activation
+
+    # The name of this node.
+    name: Optional[str]
+    def __init__(self, position: tuple[int, int], /, *,
+                 activation: Activation=ACT_Sigmoid,
+                 name: Optional[str] = None,
+                **kwargs
+                 ):
+        super().__init__(position, **kwargs)
+        self.activation = activation
+        self.name = name
+
+    def __repr__(self) -> str:
+        if self.name is None:
+            return f'Out[{self.idx}]={self.value:.2f}'
+        return f'Out.{self.name}={self.value:.2f}'
+
+class Bias(Node):
+    """
+    A bias node in the network.
+    """
+    def __init__(self, position: tuple[int, int], /, **kwargs):
+        super().__init__(position, **kwargs)
+    @property
+    def is_bias(self) -> bool:
+        """Is this node a bias node?"""
+        return True
+
+    @property
+    def value(self) -> float:
+        """The value of this node."""
+        return 1.0
+
+    @value.setter
+    def value(self, value: float):
+        """The value of this node."""
+        raise ValueError('Cannot set the value of a bias node.')
+
+    @property
+    def label(self) -> str:
+        """The label for this node."""
+        return "1"
+
+    def __repr__(self):
+        return "<1>"
 
 class Edge:
     """
@@ -171,18 +251,30 @@ class Layer:
             case LayerType.Input | LayerType.Hidden:
                 offset = (max_layer_size - nodes) / 2
             case LayerType.Output:
-                offset = (max_layer_size - nodes + 2) / 2
-        def node(**kwargs):
+                offset = (max_layer_size - nodes + 2) / 2\
+
+        def node(idx: Optional[int] = None, is_bias: bool = False, **kwargs):
+            """Construct a suitable node for this layer."""
             position = next(positions)
             pos = (self.position, position + offset)
+            if (is_bias):
+                return Bias(pos, layer=self)
             name = None if names is None else names[idx]
-            return Node(pos, activation=activation, name=name, **kwargs)
+            match layer_type:
+                case LayerType.Input:
+                    return Input(pos, layer=self, idx=idx, name=name, **kwargs)
+                case LayerType.Output:
+                    return Output(pos, layer=self, idx=idx, activation=activation, name=name, **kwargs)
+                case LayerType.Hidden:
+                    return Hidden(pos, layer=self, idx=idx, activation=activation, name=name, **kwargs)
+                case _:
+                    raise ValueError(f'Unknown layer type: {layer_type}')
         bias = []
         match layer_type:
             case LayerType.Input | LayerType.Hidden:
                 self.bias = node(is_bias=True)
                 bias = [self.bias]
-        self.nodes = bias + [node() for _ in range(nodes)]
+        self.nodes = bias + [node(idx) for idx in range(nodes)]
 
     @property
     def real_nodes(self):

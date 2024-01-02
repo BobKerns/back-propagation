@@ -162,6 +162,13 @@ class Network:
         #ax.set_ylim(25, top)
         coolwarm: Colormap = _colormaps.get_cmap('coolwarm'),
         coolwarm = coolwarm[0]
+
+        values = [node.value for node in self.graph.nodes]
+        minval = min(*values, 0)
+        maxval = max(*values, 1)
+        weights = [edge.weight for (f, t, edge) in self.graph.edges(data='edge')]
+        minweight = min(*weights, -0.1)
+        maxweight = max(*weights, 0.1)
         def draw_nodes(nodelist, /, *,
                        node_size=1000,
                        edgecolors='black',
@@ -171,10 +178,11 @@ class Network:
                                 nodelist=nodelist,
                                 node_size=node_size,
                                 node_color=[n.value for n in nodelist],
-                                vmin=-2.5, vmax=2.5,
+                                vmin=minval, vmax=maxval,
                                 cmap=coolwarm,
                                 edgecolors=edgecolors,
                                 label=label,
+                                alpha=0.4,
                                 ax=ax,
                                 **kwargs)
             text_y_offset = 0.006
@@ -201,9 +209,10 @@ class Network:
                    edgecolors='green',
                    font_color='green')
         draw_networkx_edges(self.graph, self.positions,
+                            node_size=1000,
                             edge_color=self.edge_colors,
                             edge_cmap=coolwarm,
-                            edge_vmin=-1, edge_vmax=1,
+                            edge_vmin=minweight, edge_vmax=maxweight,
                             ax=ax)
         ax.set_title(label)
         positions = self.positions

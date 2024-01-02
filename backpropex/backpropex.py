@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Callable, Generator, Optional
 from functools import cached_property
 import math
@@ -55,13 +55,13 @@ def sigmoid_derivative(x: float) -> float:
 
 ACT_Sigmoid = Activation('Sigmoid', sigmoid, sigmoid_derivative)
 
-class LayerType(Enum):
+class LayerType(StrEnum):
     """
     The type of a layer in a neural network.
     """
-    Input = 0
-    Hidden = 1
-    Output = 2
+    Input = "Input"
+    Hidden = "Hidden"
+    Output = "Output"
 
 class LossFunction:
     """
@@ -125,6 +125,9 @@ class Edge:
     @property
     def label(self):
         return f'{self.weight:.2f}'
+
+    def __repr__(self):
+        return f'Edge({self.previous} -> {self.next})'
 
 class Layer:
     # Label for this layer
@@ -202,6 +205,9 @@ class Layer:
     def __len__(self):
         """The number of real nodes in this layer."""
         return len(self.real_nodes)
+
+    def __repr__(self):
+        return f'{self.layer_type} {self.activation.name}({len(self.nodes)})'
 
 class Network:
     """
@@ -466,3 +472,5 @@ class Network:
         """The number of layers in this network."""
         return len(self.layers)
 
+    def __repr__(self):
+        return f'Network({",".join((str(len(l)) for l in self.layers))})'

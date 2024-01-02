@@ -9,3 +9,5 @@ Bias nodes are shown in a way which partially dissoaciates them from the layers.
 Layers are labeled and tagged with the activation function used in the layer
 
 Nodes and edges are color-coded to reflect their values and weights, respectively. Blue is the most negative, red the most positive, passing through light grey at zero.
+
+Networks are callable. The result is a generator, that on every call to `next()`, produces a new diagram for each step of the forward propagation. The value yielded is the label from the diagram, util the output stage is reached. The result from the output will be packaged as a tuple.

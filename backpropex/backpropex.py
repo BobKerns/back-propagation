@@ -159,7 +159,7 @@ class Layer:
             case LayerType.Input | LayerType.Hidden:
                 offset = (max_layer_size - nodes) / 2
             case LayerType.Output:
-                offset = (max_layer_size - nodes + 1) / 2
+                offset = (max_layer_size - nodes + 2) / 2
         def node(**kwargs):
             position = next(positions)
             pos = (self.position, position + offset)

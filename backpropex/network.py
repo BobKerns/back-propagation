@@ -1,6 +1,8 @@
 
+from collections import namedtuple
 from functools import cached_property
 from typing import Any, Generator, Optional, Sequence
+import re
 from matplotlib import pyplot as plt
 from matplotlib.cm import _colormaps
 from matplotlib.colors import Colormap
@@ -32,6 +34,8 @@ class Network:
     margin: float
     max_layer_size: int
     name: str
+    input_type: namedtuple
+    output_type: namedtuple
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
                  loss_function: LossFunction=MeanSquaredError,
@@ -96,6 +100,15 @@ class Network:
         for layer in self.layers[1:]:
             self.connect_layers(prev, layer)
             prev = layer
+
+        # We are all set up, so let's define our input and output.
+        def sanitize(name: str):
+            return '_'.join((s for s in re.split(r'[^a-zA-Z0-9_]+', name) if s != ''))
+        print([sanitize(node.name) for node in self.input_layer.real_nodes])
+        self.input_type = namedtuple(f'{sanitize(self.name)}_input',
+                                       [sanitize(node.name) for node in self.input_layer.real_nodes])
+        self.output_type = namedtuple(f'{sanitize(self.name)}_output',
+                                       [sanitize(node.name) for node in self.output_layer.real_nodes])
 
     def connect_layers(self, prev: Layer, next: Layer):
         """
@@ -229,7 +242,9 @@ class Network:
                  epoch: Optional[int] = None
                  ) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
         """
-        Evaluate the network for a given input.
+        Evaluate the network for a given input. Returns a generator that produces
+        diagrams of the network as it is evaluated. The final value is the output
+        from the network as a named tuple.
         """
         layer = self.layers[0]
         layer.values = input
@@ -240,7 +255,7 @@ class Network:
                 node.value = sum(edge.weight * edge.previous.value for f, t, edge in self.graph.in_edges(node, data='edge'))
                 node.value = node.activation(node.value)
             yield self.show(label=f'{epoch_label}Forward: {layer.label}')
-        yield self.output_layer.values
+        yield self.output_type(*self.output_layer.values)
 
     def train_one(self, input: np.array, expected: np.array, /, *,
                   epoch:int = 0
@@ -276,6 +291,14 @@ class Network:
         """The output layer of this network."""
         return self.layers[-1]
 
+    @property
+    def input(self):
+        """The input nodes of this network."""
+        return self.input_type(*(n.value for n in self.input_layer.real_nodes))
+
+    def output(self):
+        """The input nodes of this network."""
+        return self.output_type(*(n.value for n in self.output_layer.real_nodes))
     @property
     def hidden_layers(self):
         """The hidden layers of this network."""

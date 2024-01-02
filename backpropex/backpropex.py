@@ -395,6 +395,8 @@ class Network:
         for layer in self.layers[0:-1]:
             ax.annotate('Bias', ((layer.position + 0.5) * x_scale + layer_x_offset, layer_y_offset),
                         color='green')
+        for layer in self.layers[1:]:
+            ax.annotate(layer.activation.name, (layer.position * x_scale + layer_x_offset, layer_y_offset - 0.025))
         plt.show()
 
     def show(self, label: str):

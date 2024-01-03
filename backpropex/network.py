@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from functools import cached_property
 from typing import Any, Generator, Optional, Sequence
 import re
+import math
 from matplotlib import pyplot as plt
 from matplotlib.cm import _colormaps
 from matplotlib.colors import Colormap
@@ -94,7 +95,6 @@ class Network:
             for nodes, activation, idx
             in zip(layers, activations, range(len(layers)))
         ]
-        self.loss_function = loss_function
         # Label the layers
         self.layers[0].label = 'Input'
         self.layers[-1].label = 'Output'
@@ -140,8 +140,6 @@ class Network:
     @cached_property
     def positions(self):
         """Compute the positions of the nodes in the graph."""
-        xscale = 1.0 / len(self.layers)
-        yscale = 1.0 / (self.max_layer_size + 1)
         def place(node: Node):
             pos = node.position
             xpos = pos[0] + 0.5 if node.is_bias else pos[0]
@@ -227,7 +225,32 @@ class Network:
                             edge_vmin=minweight, edge_vmax=maxweight,
                             ax=ax)
         ax.set_title(label)
+        # Label the edges. We'll need to look up node positions.
         positions = self.positions
+        # Rotate through some offsets to avoid label collisions
+        shifts = (0.065, 0.080, 0.055, 0.075)
+        # We group the edges per incomeing node so we can shift the labels
+        # to avoid collisions.
+        for node in self.graph.nodes:
+            def plen(p: tuple[float, float], n: tuple[float, float]) -> float:
+                """Compute the length of the line between two points."""
+                x2 = (p[0] - n[0]) ** 2.0
+                y2 = (p[1] - n[1]) ** 2.0
+                return math.sqrt(x2 + y2)
+            for idx, (t, f, edge) in enumerate(self.graph.in_edges(node, data='edge')):
+                loc1 = positions[edge.previous]
+                loc2 = positions[edge.next]
+                loc1_x, loc1_y = loc1
+                loc2_x, loc2_y = loc2
+                edge_len =  plen(loc1, loc2)
+                dx = (loc2_x - loc1_x) / edge_len
+                dy = (loc2_y - loc1_y) / edge_len
+                # Choose the shift for the label to avoid conflicts
+                shift = shifts[idx % len(shifts)]
+                loc = loc2_x - dx * shift, loc2_y - dy * shift
+                #  Compute the color for the label based on the edge weight
+                #  This matches how the edge is colored
+                weight = edge.weight
                 color = coolwarm((weight + 1) / 2)
                 ax.annotate(edge.label, loc,
                             color=color,
@@ -237,7 +260,6 @@ class Network:
         # Label the layers on the graph
         layer_x_offset = 0.085
         layer_y_offset = 0.05
-        x_scale = 1.0 / len(self.layers)
         for layer in self.layers:
             ax.annotate(layer.label, (layer.position * self.xscale + layer_x_offset, layer_y_offset),
                         horizontalalignment='center',

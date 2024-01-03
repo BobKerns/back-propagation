@@ -56,6 +56,10 @@ class Network:
     expected: Optional[Sequence[float]] = None
     xscale: float
     yscale: float
+    # The layer that is currently being evaluated
+    active_layer: Optional[Layer] = None
+    active_message: Optional[str] = None
+
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
                  loss_function: LossFunction=MeanSquaredError,
@@ -76,15 +80,6 @@ class Network:
             activations = [ACT_ReLU] * (len(layers) - 1) + [ACT_Sigmoid]
         self.max_layer_size = max(layers)
         self.name = name if name is not None else f'Network_{next(ids)}'
-
-        def layer_type(idx: int):
-            match idx:
-                case 0:
-                    return LayerType.Input
-                case _ if idx == len(layers) - 1:
-                    return LayerType.Output
-                case _:
-                    return LayerType.Hidden
 
         def node_names(ltype: LayerType):
             if ltype == LayerType.Input:
@@ -201,6 +196,9 @@ class Network:
         ax.set_title(label)
         self._draw_nodes(ax)
         self._draw_edges(ax)
+        # Label the layers on the graph
+        if self.active_layer is not None:
+            self._draw_active(ax)
 
         self._draw_layer_labels(ax)
         if self.expected is not None:
@@ -270,11 +268,6 @@ class Network:
         # We group the edges per incomeing node so we can shift the labels
         # to avoid collisions.
         for node in self.graph.nodes:
-            def plen(p: tuple[float, float], n: tuple[float, float]) -> float:
-                """Compute the length of the line between two points."""
-                x2 = (p[0] - n[0]) ** 2.0
-                y2 = (p[1] - n[1]) ** 2.0
-                return math.sqrt(x2 + y2)
             for idx, (t, f, edge) in enumerate(self.graph.in_edges(node, data='edge')):
                 loc1 = positions[edge.previous]
                 loc2 = positions[edge.next]
@@ -317,6 +310,23 @@ class Network:
                         verticalalignment='center',
                         )
 
+    def _draw_active(self, ax: Axes):
+         """
+         Highlight the active layer, if there is one.
+         """
+         if self.active_layer is not None:
+            if self.active_message is not None:
+                ax.annotate(self.active_message, (self.active_layer.position * self.xscale + layer_x_offset, layer_y0_offset),
+                            color='red',
+                            horizontalalignment='center',
+                            verticalalignment='center',
+                            )
+            fancy = FancyBboxPatch((self.active_layer.position * self.xscale + 0.145 * layer_x_offset / 2, layer_y2_offset - 0.02), 0.15, 0.1,
+                                    boxstyle='square,pad=0.001',
+                                    fc='white', ec='red',
+                                    )
+            ax.add_patch(fancy)
+
     def _draw_expected(self, ax: Axes):
         if self.expected is not None:
             # Draw the expected output during a training cycle.
@@ -340,7 +350,6 @@ class Network:
             loss_pos = expcol, layer_y_offset
             ax.annotate(self.loss_function.name, loss_pos, color='red', horizontalalignment='center')
             ax.annotate(f'Loss={loss:.2f}', (loss_pos[0], loss_pos[1] - 0.025), color='red', horizontalalignment='center')
-        plt.show()
 
     def show(self, label: str):
         self.draw(label=label)
@@ -356,12 +365,14 @@ class Network:
         layer = self.layers[0]
         layer.values = input
         epoch_label = '' if epoch is None else f'Epoch: {epoch} '
-        yield self.show(label=f'{epoch_label}{layer.label}: {''.join(map(repr, layer.values))}')
+        with self.active(layer, message="Setting input"):
+            yield self.show(label=f'{epoch_label}{layer.label}: {''.join(map(repr, layer.values))}')
         for layer in self.layers[1:]:
-            for node in layer.real_nodes:
-                node.value = sum(edge.weight * edge.previous.value for f, t, edge in self.graph.in_edges(node, data='edge'))
-                node.value = node.activation(node.value)
-            yield self.show(label=f'{epoch_label}Forward: {layer.label}')
+            with self.active(layer, message=f'Forward: {layer.label}'):
+                for node in layer.real_nodes:
+                    node.value = sum(edge.weight * edge.previous.value for edge in self.edges)
+                    node.value = node.activation(node.value)
+                yield self.show(label=f'Forward: {layer.label}')
         yield self.output_type(*self.output_layer.values)
 
     @contextmanager
@@ -372,6 +383,18 @@ class Network:
         self.expected = expected
         yield
         self.expected = None
+
+    @contextmanager
+    def active(self, layer: Layer, /, *, message: Optional[str] = None):
+        """
+        Set the active layer for the network during a training pass.
+        """
+        self.active_layer = layer
+        self.active_message = message
+        yield
+        self.active_layer = None
+        self.active_message = None
+
     def train_one(self, input: np.array, expected: np.array, /, *,
                   epoch:int = 0
                   ) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
@@ -386,7 +409,7 @@ class Network:
             yield self.show(label=f'Epoch: {epoch} Backward: {layer.label}')
             for layer in reversed(self.layers[0:-1]):
                 for node in layer.real_nodes:
-                    node.value = sum(edge.weight * edge.next.value for f, t, edge in self.graph.out_edges(node, data='edge'))
+                    node.value = sum(edge.weight * edge.next.value for edge in self.edges)
                     node.value *= node.value
 
     def train(self, data: np.array, /, *, epochs: int=1000, learning_rate: float=0.1):

@@ -37,6 +37,8 @@ class Network:
     max_layer_size: int
     name: str
     expected: Optional[Sequence[float]] = None
+    xscale: float
+    yscale: float
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
                  loss_function: LossFunction=MeanSquaredError,
@@ -191,18 +193,20 @@ class Network:
                                 alpha=0.4,
                                 ax=ax,
                                 **kwargs)
-            text_y_offset = 0.006
             for node in nodelist:
                 pos_x, pos_y = self.positions[node]
-                if node.is_bias:
-                    pos = (pos_x - 0.004, pos_y - text_y_offset)
-                else:
-                    pos = (pos_x - 0.013, pos_y - text_y_offset)
+                pos = pos_x, pos_y - 0.001
                 ax.annotate(node.label, pos,
-                            color=font_color)
+                            color=font_color,
+                            horizontalalignment='center',
+                            verticalalignment='center',
+                            )
                 if node.name is not None:
-                    ax.annotate(node.name, (pos_x - 0.013, pos_y - text_y_offset - 0.04),
-                                color=font_color)
+                    ax.annotate(node.name, (pos_x, pos_y - 0.04),
+                                color=font_color,
+                                horizontalalignment='center',
+                                verticalalignment='center',
+                                )
         regular_nodes = [node for node in self.graph.nodes if not node.is_bias]
         bias_nodes = [node for node in self.graph.nodes if node.is_bias]
         # Draw the regular nodes first
@@ -222,32 +226,31 @@ class Network:
                             ax=ax)
         ax.set_title(label)
         positions = self.positions
-        # Offsets along the edge to avoid overlapping labels
-        shifts = (-0.05, 0.05, 0.075)
-        for idx, edge in enumerate(self.edges):
-            loc1 = positions[edge.previous]
-            loc2 = positions[edge.next]
-            # Choose the shift for the label to avoid conflicts
-            shift = shifts[idx % len(shifts)]
-            loc_x = loc1[0] *(0.8 + shift) + loc2[0] * (0.2 - shift)
-            loc_y = loc1[1] * (0.75 + shift) + loc2[1] * (0.25 - shift)
-            loc = loc_x, loc_y
-            #  Compute the color for the label based on the edge weight
-            #  This matches how the edge is colored
-            weight = edge.weight
-            color = coolwarm((weight + 1) / 2)
-            ax.annotate(edge.label, loc, color=color)
+                color = coolwarm((weight + 1) / 2)
+                ax.annotate(edge.label, loc,
+                            color=color,
+                            horizontalalignment='center',
+                            verticalalignment='center',
+                            )
         # Label the layers on the graph
         layer_x_offset = 0.085
         layer_y_offset = 0.05
         x_scale = 1.0 / len(self.layers)
         for layer in self.layers:
             ax.annotate(layer.label, (layer.position * self.xscale + layer_x_offset, layer_y_offset),
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                        )
         for layer in self.layers[0:-1]:
-            ax.annotate('Bias', ((layer.position + 0.5) * x_scale + layer_x_offset, layer_y_offset),
-                        color='green')
+            ax.annotate('Bias', ((layer.position + 0.5) * self.xscale + layer_x_offset, layer_y_offset),
+                        color='green',
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                        )
         for layer in self.layers[1:]:
             ax.annotate(layer.activation.name, (layer.position * self.xscale + layer_x_offset, layer_y_offset - 0.025),
+                        horizontalalignment='center',
+                        verticalalignment='center',
                         )
         if self.expected is not None:
             expcol = len(self.layers) * self.xscale

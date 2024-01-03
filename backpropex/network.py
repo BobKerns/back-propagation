@@ -305,6 +305,7 @@ class Network:
         """The input nodes of this network."""
         return self.input_type(*(n.value for n in self.input_layer.real_nodes))
 
+    @property
     def output(self):
         """The input nodes of this network."""
         return self.output_type(*(n.value for n in self.output_layer.real_nodes))

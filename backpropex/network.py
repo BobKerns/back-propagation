@@ -36,6 +36,8 @@ class Network:
     margin: float
     max_layer_size: int
     name: str
+    input_type: type[namedtuple]
+    output_type: type[namedtuple]
     expected: Optional[Sequence[float]] = None
     xscale: float
     yscale: float

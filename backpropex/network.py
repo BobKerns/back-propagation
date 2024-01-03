@@ -324,7 +324,7 @@ class Network:
         """
         Set the expected output for the network during a training pass.
         """
-        self.expected = expected.tolist()\\\\
+        self.expected = expected.tolist()
         yield
         self.expected = None
     def train_one(self, input: np.array, expected: np.array, /, *,

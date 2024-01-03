@@ -1,11 +1,13 @@
 
 from collections import namedtuple
+from contextlib import contextmanager
 from functools import cached_property
 from typing import Any, Generator, Optional, Sequence
 import re
 from matplotlib import pyplot as plt
 from matplotlib.cm import _colormaps
 from matplotlib.colors import Colormap
+from matplotlib.patches import FancyBboxPatch
 
 from networkx import DiGraph, draw_networkx_edges, draw_networkx_nodes
 import numpy as np
@@ -34,8 +36,7 @@ class Network:
     margin: float
     max_layer_size: int
     name: str
-    input_type: namedtuple
-    output_type: namedtuple
+    expected: Optional[Sequence[float]] = None
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
                  loss_function: LossFunction=MeanSquaredError,
@@ -101,6 +102,11 @@ class Network:
             self.connect_layers(prev, layer)
             prev = layer
 
+        self.loss_function = loss_function
+
+        self.xscale = 1.0 / (len(self.layers) + 0.4)
+        self.yscale = 1.0 / (self.max_layer_size + 1)
+
         # We are all set up, so let's define our input and output.
         def sanitize(name: str):
             return '_'.join((s for s in re.split(r'[^a-zA-Z0-9_]+', name) if s != ''))
@@ -136,7 +142,7 @@ class Network:
             pos = node.position
             xpos = pos[0] + 0.5 if node.is_bias else pos[0]
             ypos = 0 if node.is_bias else pos[1]
-            return (xpos * xscale+ 0.1, ypos * yscale + self.margin)
+            return (xpos * self.xscale + 0.08, ypos * self.yscale + self.margin)
         return {node: place(node) for node in self.graph.nodes}
 
     @property
@@ -236,12 +242,32 @@ class Network:
         layer_y_offset = 0.05
         x_scale = 1.0 / len(self.layers)
         for layer in self.layers:
-            ax.annotate(layer.label, (layer.position * x_scale + layer_x_offset, layer_y_offset))
+            ax.annotate(layer.label, (layer.position * self.xscale + layer_x_offset, layer_y_offset),
         for layer in self.layers[0:-1]:
             ax.annotate('Bias', ((layer.position + 0.5) * x_scale + layer_x_offset, layer_y_offset),
                         color='green')
         for layer in self.layers[1:]:
-            ax.annotate(layer.activation.name, (layer.position * x_scale + layer_x_offset, layer_y_offset - 0.025))
+            ax.annotate(layer.activation.name, (layer.position * self.xscale + layer_x_offset, layer_y_offset - 0.025),
+                        )
+        if self.expected is not None:
+            expcol = len(self.layers) * self.xscale
+            for idx, node in enumerate(self.output_layer.real_nodes):
+                pos = positions[node]
+                loc = (expcol, pos[1])
+                locarrow = (expcol - 0.011, loc[1] - 0.012)
+                ax.annotate(f'{self.expected[idx]:.2f}', loc,
+                            color='red',
+                            horizontalalignment='center',
+                            verticalalignment='center',
+                            )
+                fancy = FancyBboxPatch(locarrow, 0.03, 0.025,
+                                        boxstyle='larrow,pad=0.001',
+                                        fc='white', ec='red')
+                ax.add_patch(fancy)
+            loss = self.loss_function(np.array(self.output), np.array(self.expected))
+            loss_pos = expcol, layer_y_offset
+            ax.annotate(self.loss_function.name, loss_pos, color='red', horizontalalignment='center')
+            ax.annotate(f'Loss={loss:.2f}', (loss_pos[0], loss_pos[1] - 0.025), color='red', horizontalalignment='center')
         plt.show()
 
     def show(self, label: str):
@@ -266,21 +292,30 @@ class Network:
             yield self.show(label=f'{epoch_label}Forward: {layer.label}')
         yield self.output_type(*self.output_layer.values)
 
+    @contextmanager
+    def expecting(self, expected: np.array):
+        """
+        Set the expected output for the network during a training pass.
+        """
+        self.expected = expected.tolist()\\\\
+        yield
+        self.expected = None
     def train_one(self, input: np.array, expected: np.array, /, *,
                   epoch:int = 0
                   ) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
         """
         Train the network for a given input and expected output.
         """
-        # Forward pass
-        yield from self(input, epoch=epoch)
-        # Backward pass
-        layer = self.layers[-1]
-        yield self.show(label=f'Epoch: {epoch} Backward: {layer.label}')
-        for layer in reversed(self.layers[0:-1]):
-            for node in layer.real_nodes:
-                node.value = sum(edge.weight * edge.next.value for f, t, edge in self.graph.out_edges(node, data='edge'))
-                node.value *= node.value
+        with self.expecting(expected):
+            # Forward pass
+            yield from self(input, epoch=epoch)
+            # Backward pass
+            layer = self.layers[-1]
+            yield self.show(label=f'Epoch: {epoch} Backward: {layer.label}')
+            for layer in reversed(self.layers[0:-1]):
+                for node in layer.real_nodes:
+                    node.value = sum(edge.weight * edge.next.value for f, t, edge in self.graph.out_edges(node, data='edge'))
+                    node.value *= node.value
 
     def train(self, data: np.array, /, *, epochs: int=1000, learning_rate: float=0.1):
         """

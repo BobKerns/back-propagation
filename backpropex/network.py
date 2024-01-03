@@ -6,6 +6,7 @@ from typing import Any, Generator, Optional, Sequence
 import re
 import math
 from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
 from matplotlib.cm import _colormaps
 from matplotlib.colors import Colormap
 from matplotlib.patches import FancyBboxPatch
@@ -27,6 +28,19 @@ def _ids():
         idx += 1
 
 ids = _ids()
+
+# Constants for drawing the network
+layer_x_offset = 0.085
+layer_y_offset = 0.05 # Main row
+layer_y2_offset = layer_y_offset - 0.025 # second row, below main row
+layer_y0_offset = layer_y_offset + 0.025 # zeroth row, above main row
+
+def plen(p: tuple[float, float], n: tuple[float, float]) -> float:
+    """{Pythagorhean length of a line. expressed as two points"""
+    x2 = (p[0] - n[0]) ** 2.0
+    y2 = (p[1] - n[1]) ** 2.0
+    return math.sqrt(x2 + y2)
+
 class Network:
     """
     A neural network.
@@ -83,7 +97,7 @@ class Network:
                 return output_names
             return None
         def make_layer(idx: int, nodes: int, activation: ActivationFunction):
-            ltype = layer_type(idx)
+            ltype = self.layer_type(idx, len(layers))
             return Layer(nodes,
                     position=idx,
                     activation=activation,
@@ -119,6 +133,16 @@ class Network:
                                        [sanitize(node.name) for node in self.input_layer.real_nodes])
         self.output_type = namedtuple(f'{sanitize(self.name)}_output',
                                        [sanitize(node.name) for node in self.output_layer.real_nodes])
+    def layer_type(self, idx: int, nlayers: int = None):
+        if nlayers is None:
+            nlayers = len(self.layers)
+        match idx:
+            case 0:
+                return LayerType.Input
+            case _ if idx == nlayers - 1:
+                return LayerType.Output
+            case _:
+                return LayerType.Hidden
 
     def connect_layers(self, prev: Layer, next: Layer):
         """
@@ -145,20 +169,26 @@ class Network:
             xpos = pos[0] + 0.5 if node.is_bias else pos[0]
             ypos = 0 if node.is_bias else pos[1]
             return (xpos * self.xscale + 0.08, ypos * self.yscale + self.margin)
-        return {node: place(node) for node in self.graph.nodes}
+        return {node: place(node) for node in self.nodes}
 
     @property
-    def node_colors(self):
-        return [node.value for node in self.graph.nodes]
+    def weights(self) -> Generator[float, None, None]:
+        return (edge.weight for edge in self.edges)
 
     @property
-    def edge_colors(self):
-        return [edge.weight for (f, t, edge) in self.graph.edges(data='edge')]
+    def values(self) -> Generator[float, None, None]:
+        return (node.value for node in self.nodes)
 
     @property
-    def edges(self):
-        return [edge for (f, t, edge) in self.graph.edges(data='edge')]
+    def node_colors(self) -> list[float]:
+        return [v for v in self.values]
 
+    @property
+    def edge_colors(self) -> list[float]:
+        return [w for w in self.weights]
+
+    coolwarm: Colormap = _colormaps.get_cmap('coolwarm'),
+    coolwarm = coolwarm[0]
     def draw(self, /, *, label: str="Initial State"):
         """
         Draw the network using matplotlib.
@@ -168,15 +198,21 @@ class Network:
         ax.set_autoscale_on(False)
         #top =self.max_layer_size * 250 + self.margin + 150
         #ax.set_ylim(25, top)
-        coolwarm: Colormap = _colormaps.get_cmap('coolwarm'),
-        coolwarm = coolwarm[0]
+        ax.set_title(label)
+        self._draw_nodes(ax)
+        self._draw_edges(ax)
 
-        values = [node.value for node in self.graph.nodes]
-        minval = min(*values, 0)
-        maxval = max(*values, 1)
-        weights = [edge.weight for (f, t, edge) in self.graph.edges(data='edge')]
-        minweight = min(*weights, -0.1)
-        maxweight = max(*weights, 0.1)
+        self._draw_layer_labels(ax)
+        if self.expected is not None:
+            self._draw_expected(ax)
+        plt.show()
+
+    def _draw_nodes(self, ax: Axes):
+        """
+        Draw the nodes of the network.
+        """
+        minval = min(*self.values, 0)
+        maxval = max(*self.values, 1)
         def draw_nodes(nodelist, /, *,
                        node_size=1000,
                        edgecolors='black',
@@ -187,9 +223,8 @@ class Network:
                                 node_size=node_size,
                                 node_color=[n.value for n in nodelist],
                                 vmin=minval, vmax=maxval,
-                                cmap=coolwarm,
+                                cmap=self.coolwarm,
                                 edgecolors=edgecolors,
-                                label=label,
                                 alpha=0.4,
                                 ax=ax,
                                 **kwargs)
@@ -218,13 +253,16 @@ class Network:
                    linewidths=2.0,
                    edgecolors='green',
                    font_color='green')
+
+    def _draw_edges(self, ax: Axes):
+        minweight = min(*self.weights, -0.1)
+        maxweight = max(*self.weights, 0.1)
         draw_networkx_edges(self.graph, self.positions,
                             node_size=1000,
                             edge_color=self.edge_colors,
-                            edge_cmap=coolwarm,
+                            edge_cmap=self.coolwarm,
                             edge_vmin=minweight, edge_vmax=maxweight,
                             ax=ax)
-        ax.set_title(label)
         # Label the edges. We'll need to look up node positions.
         positions = self.positions
         # Rotate through some offsets to avoid label collisions
@@ -251,15 +289,17 @@ class Network:
                 #  Compute the color for the label based on the edge weight
                 #  This matches how the edge is colored
                 weight = edge.weight
-                color = coolwarm((weight + 1) / 2)
+                color = self.coolwarm((weight + 1) / 2)
                 ax.annotate(edge.label, loc,
                             color=color,
                             horizontalalignment='center',
                             verticalalignment='center',
                             )
-        # Label the layers on the graph
-        layer_x_offset = 0.085
-        layer_y_offset = 0.05
+
+    def _draw_layer_labels(self, ax: Axes):
+        """
+        Label the layers at the bottom of the graph.
+        """
         for layer in self.layers:
             ax.annotate(layer.label, (layer.position * self.xscale + layer_x_offset, layer_y_offset),
                         horizontalalignment='center',
@@ -272,12 +312,17 @@ class Network:
                         verticalalignment='center',
                         )
         for layer in self.layers[1:]:
-            ax.annotate(layer.activation.name, (layer.position * self.xscale + layer_x_offset, layer_y_offset - 0.025),
+            ax.annotate(layer.activation.name, (layer.position * self.xscale + layer_x_offset, layer_y2_offset),
                         horizontalalignment='center',
                         verticalalignment='center',
                         )
+
+    def _draw_expected(self, ax: Axes):
         if self.expected is not None:
+            # Draw the expected output during a training cycle.
+            # expcol is the column for the expected output during training
             expcol = len(self.layers) * self.xscale
+            positions = self.positions
             for idx, node in enumerate(self.output_layer.real_nodes):
                 pos = positions[node]
                 loc = (expcol, pos[1])
@@ -320,11 +365,11 @@ class Network:
         yield self.output_type(*self.output_layer.values)
 
     @contextmanager
-    def expecting(self, expected: np.array):
+    def expecting(self, expected: Sequence[float]):
         """
         Set the expected output for the network during a training pass.
         """
-        self.expected = expected.tolist()
+        self.expected = expected
         yield
         self.expected = None
     def train_one(self, input: np.array, expected: np.array, /, *,
@@ -352,6 +397,19 @@ class Network:
             for input, expected in data:
                 yield from self.train_one(input, expected, epoch=epoch)
             yield self.show(label=f'Epoch: {epoch}')
+
+    @property
+    def edges(self) -> Generator[Edge, None, None]:
+        return (edge for (f, t, edge) in self.graph.edges(data='edge'))
+
+    @property
+    def nodes(self) -> Generator[Node, None, None]:
+        return (node for node in self.graph.nodes)
+
+    @property
+    def real_nodes(self) -> Generator[Node, None, None]:
+        return (node for node in self.graph.nodes if not node.is_bias)
+
     @property
     def input_layer(self):
         """The input layer of this network."""

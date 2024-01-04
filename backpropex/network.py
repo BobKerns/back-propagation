@@ -53,7 +53,7 @@ from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 from backpropex.edge import Edge
 from backpropex.layer import Layer
 from backpropex.loss import LossFunction, MeanSquaredError
-from backpropex.node import Node
+from backpropex.node import Input, Node, Output
 
 def _ids():
     """Generate unique ids."""
@@ -312,7 +312,7 @@ class Network:
                             horizontalalignment='center',
                             verticalalignment='center',
                             )
-                if not node.is_bias and node.name is not None:
+                if isinstance(node, (Input, Output)):
                     ax.annotate(node.name, (pos_x, pos_y - 0.04), # type: ignore
                                 color=font_color,
                                 horizontalalignment='center',

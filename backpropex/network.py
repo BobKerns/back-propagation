@@ -88,8 +88,17 @@ class Network:
     # The layer that is currently being evaluated
     active_layer: Optional[Layer] = None
     active_message: Optional[str] = None
+    # The item within the training set currently being trained
+    datum_number: Optional[int] = None
+    datum_max: int = 0
     datum_value: Optional[NPFloats] = None
     datum_expected: Optional[NPFloats] = None
+    # The epoch currently being trained (pass through the training set))
+    epoch_number: Optional[int] = None
+    # The number of epochs to train
+    epoch_max: int = 0
+    # The loss for the current training item.
+    loss: Optional[float] = None
 
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
@@ -463,8 +472,43 @@ class Network:
         self.active_layer = None
         self.active_message = None
 
+    @contextmanager
+    def training_epoch(self, epoch: int, epoch_max: int):
+        """
+        Set the active layer for the network during a training pass.
+        """
+        self.epoch_number = epoch
+        self.epoch_max = epoch_max
+        yield epoch
+        self.epoch_number = None
+        self.epoch_max = 0
 
-    def train_one(self, input: NPFloats, expected: NPFloats, /,
+    @contextmanager
+    def training_datum(self, datum_number: int, datum_max: int,
+             datum_value: NPFloats, datum_expected: NPFloats):
+        """
+        Set the active layer for the network during a training pass.
+        """
+        self.datum_number = datum_number
+        self.datum_max = datum_max
+        self.datum_value = datum_value
+        self.datum_expected = datum_expected
+        yield datum_number, datum_max, datum_value, datum_expected
+        self.datum_number = None
+        self.datum_max = 0
+        self.datum_value = None
+        self.datum_expected = None
+
+    @contextmanager
+    def training_loss(self,  output: NPFloats, expected: NPFloats, /):
+        """
+        Set the loss for the network during a training pass.
+        """
+        loss = self.loss_function(output, expected)
+        self.loss = loss
+        yield loss
+        self.loss = None
+
         """
         Train the network for a given input and expected output.
         """

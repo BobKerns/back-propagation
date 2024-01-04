@@ -127,10 +127,10 @@ class MSE:
     """
     name: str = 'MSE'
 
-    def __call__[T: NDArray[np.float_]](self, actual: T, expected: T) -> float:
+    def __call__(self, actual: NPArray, expected: NPArray) -> float:
         return cast(float, np.sum(np.square(actual - expected))) / len(actual)
 
-    def derivative[T: NPArray](self, actual: T, expected: T) -> NPArray:
+    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
         return 2 * (actual - expected) / len(actual)
 
 from numpy import log as nplog

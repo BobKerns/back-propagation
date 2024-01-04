@@ -236,20 +236,24 @@ class Network:
         Draw the network using matplotlib.
         """
         plt.close()
-        fig, ax = plt.subplots(figsize=(15, 10))
+        fig, ax = plt.subplots(figsize=(15, 10)) # type: ignore
         ax.set_autoscale_on(False)
-        #top =self.max_layer_size * 250 + self.margin + 150
-        #ax.set_ylim(25, top)
+        minval = min(*self.values, 0)
+        maxval = max(*self.values, 1)
+        minweight = min(*self.weights, -0.1)
+        maxweight = max(*self.weights, 0.1)
         ax.set_title(label)
-        self._draw_nodes(ax)
-        self._draw_edges(ax)
+        self._draw_nodes(ax, minval, maxval)
+        self._draw_edges(ax, minweight, maxweight)
         # Label the layers on the graph
         if self.active_layer is not None:
             self._draw_active(ax)
 
         self._draw_layer_labels(ax)
-        if self.expected is not None:
+        if self.datum_expected is not None:
             self._draw_expected(ax)
+        if self.epoch_number is not None:
+            self._draw_epoch(ax)
         norm = Normalize(vmin=minval, vmax=maxval)
         cax1 = fig.add_axes((0.905, 0.50, 0.007, 0.38)) # type: ignore
         cax2 = fig.add_axes((0.905, 0.11, 0.006, 0.38)) # type: ignore
@@ -355,6 +359,19 @@ class Network:
                             verticalalignment='center',
                             )
 
+    def _draw_edges(self, ax: Axes, minweight: float, maxweight: float):
+        """
+        Draw the edges of the network and their labels.
+        """
+        edge_colors:Any = self.edge_colors
+        draw_networkx_edges(self.graph, self.positions,
+                            node_size=1000,
+                            edge_color=edge_colors,
+                            edge_cmap=self.coolwarm,
+                            edge_vmin=minweight, edge_vmax=maxweight,
+                            ax=ax)
+        self._draw_edge_labels(ax, minweight, maxweight)
+
     def _draw_layer_labels(self, ax: Axes):
         """
         Label the layers at the bottom of the graph.
@@ -430,10 +447,34 @@ class Network:
                                         boxstyle='larrow,pad=0.001',
                                         fc='white', ec='red')
                 ax.add_patch(fancy)
-            loss = self.loss_function(np.array(self.output), np.array(self.expected))
-            loss_pos = expcol, layer_y_offset
-            ax.annotate(self.loss_function.name, loss_pos, color='red', horizontalalignment='center')
-            ax.annotate(f'Loss={loss:.2f}', (loss_pos[0], loss_pos[1] - 0.025), color='red', horizontalalignment='center')
+            # If the loss is available, draw it.
+            # See the context manager method training_loss.
+            if self.loss is not None:
+                loss_pos = expcol, layer_y_offset
+                ax.annotate(self.loss_function.name, loss_pos, # type: ignore
+                            color='red',
+                            horizontalalignment='center')
+                ax.annotate(f'Loss={self.loss:.2f}', (expcol, layer_y2_offset), # type: ignore
+                            color='red',
+                            horizontalalignment='center'
+                            )
+
+    def _draw_epoch(self, ax: Axes):
+        figure = ax.figure
+        if figure is None:
+            raise ValueError('No figure for axes')
+        if self.epoch_number is not None:
+            if self.datum_number is not None:
+                figure.text(0.90, 0.88, f'Datum {self.datum_number+1}/{self.datum_max}', # type: ignore
+                            color='red',
+                            horizontalalignment='right',
+                            verticalalignment='bottom',
+                            )
+            figure.text(0.125, 0.88, f'Epoch {self.epoch_number+1}/{self.epoch_max}', # type: ignore
+                        color='red',
+                        horizontalalignment='left',
+                        verticalalignment='bottom',
+                        )
 
     def show(self, label: str):
         self.draw(label=label)
@@ -509,28 +550,68 @@ class Network:
         yield loss
         self.loss = None
 
+    def train_one(self, input: FloatSeq, expected: FloatSeq, /,
+                  datum_number: int = 0, datum_max: int = 1,
+                  ) -> Generator[Any, Any, None]:
         """
         Train the network for a given input and expected output.
         """
-        with self.expecting(expected):
+        input = np.array(input)
+        expected = np.array(expected)
+        with self.training_datum(datum_number, datum_max, input, expected):
             # Forward pass
-            yield from self(input, epoch=epoch)
+            yield from self(input)
             # Backward pass
             layer = self.layers[-1]
-            yield self.show(label=f'Epoch: {epoch} Backward: {layer.label}')
+            yield self.show(label=f'Backward: {layer.label}')
             for layer in reversed(self.layers[0:-1]):
                 for node in layer.real_nodes:
-                    node.value = sum(edge.weight * edge.next.value for edge in self.edges)
-                    node.value *= node.value
+                    value = sum(edge.weight * edge.next.value for edge in self.edges)
+                    print(f'TODO: Node {node.idx} value={value:.2f}')
 
-    def train(self, data: np.array, /, *, epochs: int=1000, learning_rate: float=0.1):
+    def backpropagate(self, output: NPFloats, expected: NPFloats, /):
+        """
+        Backpropagate the gradient through the network.
+        """
+        if self.datum_expected is None:
+            raise ValueError('No expected output set')
+        with self.training_loss(output, expected) as loss:
+            grad = self.loss_function.derivative(output, expected)
+            print(f'Loss={loss:.2f}, grad={grad:.2f}')
+            # Backward pass
+            layer = self.layers[-1]
+            for node in layer.real_nodes:
+                node.gradient = node.value - self.datum_expected[node.idx]
+            for layer in reversed(self.layers[0:-1]):
+                for node in layer.real_nodes:
+                    total_weights = sum([
+                        edge.weight * (edge.next.gradient or 0.0)
+                        for edge
+                        in self.in_edges(node)
+                    ], 0.0)
+                    d = node.activation.derivative(node.value)
+                    gradient = (
+                        cast(float, d * edge.weight / total_weights)
+                        for edge
+                        in self.in_edges(node)
+                    )
+                    node.gradient = np.array(gradient)
+
+    def train(self, data: Sequence[tuple[FloatSeq, FloatSeq]], /, *,
+              epochs: int=1000,
+              learning_rate: float=0.1
+              ) -> Generator[Any, Any, None]:
         """
         Train the network for a given set of data.
         """
+        datum_max = len(data)
         for epoch in range(epochs):
+            with self.training_epoch(epoch, epochs):
                 for idx, (input, expected) in enumerate(data):
                     input = np.array(input)
                     expected = np.array(expected)
+                    with self.training_datum(idx, datum_max, input, expected):
+                        yield from self.train_one(input, expected)
 
     @property
     def edges(self) -> Generator[Edge, None, None]:

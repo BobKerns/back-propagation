@@ -10,230 +10,235 @@ that they are correct, but they are interesting, and I have not spotted any erro
 in the ones I have examined and used.
 """
 import math
-from typing import Any, Protocol
+from typing import Protocol
 
+_registry: dict[str, 'ActivationFunction'] = {}
+def register(af: 'ActivationFunction'):
+    """
+    Register an activation function.
+    """
+    _registry[af.name] = af
+
+def get(name: str) -> 'ActivationFunction|None':
+    """
+    Get an activation function by name.
+    """
+    return _registry[name]
+
+def names() -> list[str]:
+    """
+    Get the names of all activation functions.
+    """
+    return list(_registry.keys())
 class ActivationFunction(Protocol):
     """
-    An activation function and its derivative.
+    The protocol for an activation function.
     """
+
     name: str
-
-    _registry: dict[str, 'ActivationFunction'] = {}
-
-    @staticmethod
-    def register(cls: 'ActivationFunction') -> None:
-        """Register an activation function."""
-        ActivationFunction._registry[cls.name] = cls
-
-    @staticmethod
-    def names() -> list[str]:
-        """Return the names of the registered activation functions."""
-        return list(ActivationFunction._registry.keys())
-
-    def __call__(cls, x: float) -> float:
-        """Nonlinear activation response of a node."""
+    def __call__(self, x: float) -> float:
         ...
 
-    def derivative(cls, x: float) -> float:
-        """Derivative of the activation function."""
+    def derivative(self, x: float) -> float:
         ...
-    @classmethod
-    def __getattr__(cls, name: str) -> Any:
-        """
-        Allow accessing loss functions via attribute access.
-        """
-        return ActivationFunction._registry[name]
 
-    def __init_subclass__(cls) -> None:
-        if hasattr(cls, 'name'):
-            ActivationFunction.register(cls)
-        return super().__init_subclass__()
+def activation(cls: type[ActivationFunction]) -> ActivationFunction:
+    """
+    Decorator to register an activation function.
+    """
+    af = cls()
+    register(af)
+    return af
 
-class ActivationBase(ActivationFunction):
-    """Base class to allow defining ActivationFunction objects via class syntax."""
-
-    def __new__(cls, x: float) -> float:
-        """Nonlinear activation response of a node."""
-        return cls.__call__(cls, x)
-
-    def __init_subclass__(cls) -> None:
-        """Wrap the derivative method to allow defining LossFunction objects via class syntax."""
-        sub = super().__init_subclass__()
-        derivative = cls.derivative
-        (sub or cls).derivative = lambda x: derivative(cls, x)
-        return sub
-
-class ACT_ReLU(ActivationBase):
+@activation
+class ACT_ReLU:
     """The standard ReLU activation function."""
     name = 'ReLU'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return max(0.0, x)
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 1.0 if x > 0.0 else 0.0
 
-class ACT_Softmax(ActivationBase):
+@activation
+class ACT_Softmax:
     """The standard softmax activation function."""
     name = 'Softmax'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return 1.0 / (1.0 + math.exp(-x))
 
-    def derivative(cls, x: float) -> float:
-        return cls(x) * (1.0 - cls(x))
+    def derivative(self, x: float) -> float:
+        return self(x) * (1.0 - self(x))
 
-class ACT_Sigmoid(ActivationBase):
+@activation
+class ACT_Sigmoid:
     """The standard sigmoid activation function."""
     name = 'Sigmoid'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return 1.0 / (1.0 + math.exp(-x))
 
-    def derivative(cls, x: float) -> float:
-        return cls(x) * (1.0 - cls(x))
+    def derivative(self, x: float) -> float:
+        return self(x) * (1.0 - self(x))
 
-class ACT_Tanh(ActivationBase):
+@activation
+class ACT_Tanh:
     """The standard tanh activation function."""
     name = 'Tanh'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return math.tanh(x)
 
-    def derivative(cls, x: float) -> float:
-        return 1.0 - cls(x) ** 2.0
+    def derivative(self, x: float) -> float:
+        return 1.0 - self(x) ** 2.0
 
-class ACT_Identity(ActivationBase):
+@activation
+class ACT_Identity:
     """The identity activation function."""
     name = 'Identity'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return x
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 1.0
 
-class ACT_LeakyReLU(ActivationBase):
+@activation
+class ACT_LeakyReLU:
     """The leaky ReLU activation function."""
     name = 'Leaky ReLU'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return max(0.01 * x, x)
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 1.0 if x > 0.0 else 0.01
 
-class ACT_ELU(ActivationBase):
+@activation
+class ACT_ELU:
     """The exponential linear unit activation function."""
     name = 'ELU'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return x if x > 0.0 else 0.01 * (math.exp(x) - 1.0)
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 1.0 if x > 0.0 else 0.01 * math.exp(x)
 
-class ACT_Softplus(ActivationBase):
+@activation
+class ACT_Softplus:
     """The softplus activation function."""
     name = 'Softplus'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return math.log(1.0 + math.exp(x))
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 1.0 / (1.0 + math.exp(-x))
 
-class ACT_Swish(ActivationBase):
+@activation
+class ACT_Swish:
     """The swish activation function."""
     name = 'Swish'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return x / (1.0 + math.exp(-x))
 
-    def derivative(cls, x: float) -> float:
-        return cls(x) + (1.0 - cls(x)) / (1.0 + math.exp(-x))
+    def derivative(self, x: float) -> float:
+        return self(x) + (1.0 - self(x)) / (1.0 + math.exp(-x))
 
-class ACT_SiLU(ActivationBase):
+@activation
+class ACT_SiLU:
     """The sigmoid-weighted linear unit activation function."""
     name = 'SiLU'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return x / (1.0 + math.exp(-x))
 
-    def derivative(cls, x: float) -> float:
-        return cls(x) + (1.0 - cls(x)) / (1.0 + math.exp(-x))
+    def derivative(self, x: float) -> float:
+        return self(x) + (1.0 - self(x)) / (1.0 + math.exp(-x))
 
-class ACT_Softsign(ActivationBase):
+@activation
+class ACT_Softsign:
     """The softsign activation function."""
     name = 'Softsign'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return x / (1.0 + abs(x))
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 1.0 / (1.0 + abs(x)) ** 2.0
 
-class ACT_SQNL(ActivationBase):
+@activation
+class ACT_SQNL:
     """The square nonlinearity activation function."""
     name = 'SQNL'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return 1.0 if x > 2.0 else -1.0 if x < -2.0 else x - x ** 2.0 / 4.0
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 1.0 if x > 2.0 else -1.0 if x < -2.0 else 1.0 - x / 2.0
 
-class ACT_BentIdentity(ActivationBase):
+@activation
+class ACT_BentIdentity:
     """The bent identity activation function."""
     name = 'Bent Identity'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return (math.sqrt(x ** 2.0 + 1.0) - 1.0) / 2.0 + x
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return x / (2.0 * math.sqrt(x ** 2.0 + 1.0)) + 1.0
 
-class ACT_Gaussian(ActivationBase):
+@activation
+class ACT_Gaussian:
     """The Gaussian activation function."""
     name = 'Gaussian'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return math.exp(-x ** 2.0)
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return -2.0 * x * math.exp(-x ** 2.0)
 
-class ACT_Sinc(ActivationBase):
+@activation
+class ACT_Sinc:
     """The cardinal sine activation function."""
     name = 'Sinc'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return 1.0 if x == 0.0 else math.sin(x) / x
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 0.0 if x == 0.0 else math.cos(x) / x - math.sin(x) / x ** 2.0
 
-class ACT_Sinusoid(ActivationBase):
+@activation
+class ACT_Sinusoid:
     """The sinusoid activation function."""
     name = 'Sinusoid'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return math.sin(x)
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return math.cos(x)
 
-class ACT_SincNet(ActivationBase):
+@activation
+class ACT_SincNet:
     """The SincNet activation function."""
     name = 'SincNet'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return math.sin(x) / x
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return math.cos(x) / x - math.sin(x) / x ** 2.0
 
-class ACT_SoftExponential(ActivationFunction):
+@activation
+class ACT_SoftExponential:
     """
     The soft exponential activation function.
     The soft exponential activation function is a generalization of the ReLU
@@ -252,6 +257,8 @@ class ACT_SoftExponential(ActivationFunction):
 
     def __init__(self, alpha: float = 0.0):
         self.alpha = alpha
+        self.name = f'Soft Exponential (alpha={alpha})'
+        register(self)
 
     def __call__(self, x: float) -> float:
         return (math.log(1.0 + math.exp(self.alpha * x)) + self.alpha * x) / self.alpha if self.alpha != 0.0 else x
@@ -259,32 +266,35 @@ class ACT_SoftExponential(ActivationFunction):
     def derivative(self, x: float) -> float:
         return math.exp(self.alpha * x) / (1.0 + math.exp(self.alpha * x)) if self.alpha != 0.0 else 1.0
 
-class ACT_SoftClipping(ActivationBase):
+@activation
+class ACT_SoftClipping:
     """The soft clipping activation function."""
     name = 'Soft Clipping'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return 0.5 * (x + abs(x)) / (1.0 + abs(x))
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 0.5 / (1.0 + abs(x)) ** 2.0
 
-class ACT_SoftShrink(ActivationBase):
+@activation
+class ACT_SoftShrink:
     """The soft shrinkage activation function."""
     name = 'Soft Shrink'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return x - 1.0 if x > 1.0 else x + 1.0 if x < -1.0 else 0.0
 
-    def derivative(cls, x: float) -> float:
+    def derivative(self, x: float) -> float:
         return 1.0 if x > 1.0 else 1.0 if x < -1.0 else 0.0
 
-class ACT_Softmin(ActivationBase):
+@activation
+class ACT_Softmin:
     """The softmin activation function."""
     name = 'Softmin'
 
-    def __call__(cls, x: float) -> float:
+    def __call__(self, x: float) -> float:
         return 1.0 / (1.0 + math.exp(-x))
 
-    def derivative(cls, x: float) -> float:
-        return cls(x) * (1.0 - cls(x))
+    def derivative(self, x: float) -> float:
+        return self(x) * (1.0 - self(x))

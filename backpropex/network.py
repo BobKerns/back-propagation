@@ -219,6 +219,29 @@ class Network:
         self._draw_layer_labels(ax)
         if self.expected is not None:
             self._draw_expected(ax)
+        norm = Normalize(vmin=minval, vmax=maxval)
+        cax1 = fig.add_axes((0.905, 0.50, 0.007, 0.38)) # type: ignore
+        cax2 = fig.add_axes((0.905, 0.11, 0.006, 0.38)) # type: ignore
+        fig.colorbar(drawedges=False, # type: ignore
+                     cax=cax1,
+                     norm=norm,
+                     extend='both',
+                     label='Node value',
+                     mappable=ScalarMappable(
+                         cmap=self.coolwarm,
+                         norm=norm,
+                     ))
+        wnorm = Normalize(vmin=minweight, vmax=maxweight)
+        fig.colorbar(drawedges=False, # type: ignore
+                     cax=cax2,
+                     norm=wnorm,
+                     extend='both',
+                     label='Edge weight',
+                     mappable=ScalarMappable(
+                         cmap=self.coolwarm,
+                         norm=wnorm,
+                     ))
+        plt.show() # type: ignore
 
     def _draw_nodes(self, ax: Axes, minval: float, maxval: float):
         """

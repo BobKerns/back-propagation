@@ -16,15 +16,15 @@ from numpy.typing import NDArray
 if TYPE_CHECKING:
     from backpropex.layer import Layer
 
-type NPFloats = NDArray[np.float_]
-type FloatSeq = Sequence[float]|NPFloats
+type NPFloats = NDArray[np.float_|np.int_]
+type FloatSeq = Sequence[float|int]|tuple[float|int]|NPFloats
 
 class NetTuple(Protocol):
     """Constructor for input or output named tuples"""
     def __call__(self, *args: float) -> tuple[float, ...]:
         ...
 
-type TrainingDatum = tuple[NPFloats, NPFloats]
+type TrainingDatum = tuple[FloatSeq, FloatSeq]
 type TrainingData = Sequence[TrainingDatum]
 
 class TrainingInfo(TypedDict):

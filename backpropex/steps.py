@@ -5,7 +5,7 @@ The various steps that can be taken in the network and their result data.
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal, Optional, TYPE_CHECKING
+from typing import Literal, Optional, TYPE_CHECKING, Sequence
 
 from backpropex.types import NPFloats, TrainingDatum
 
@@ -109,7 +109,7 @@ class EvalInputStepResult(EvalStepResult[Literal[StepType.Input]],
 @dataclass
 class EvalForwardStepResult(EvalStepResult[Literal[StepType.Forward]],
                             LayerStepResult[Literal[StepType.Forward]]):
-    pass
+    values: Sequence[float]
 
 @dataclass
 class EvalOutputStepResult(EvalStepResult[Literal[StepType.Output]],

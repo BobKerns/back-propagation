@@ -185,9 +185,12 @@ class Network(NetProtocol):
         for layer in self.layers[1:]:
             with self.step_active(layer):
                 for node in layer.real_nodes:
-                    value = sum(edge.weight * edge.previous.value for edge in self.edges)
+                    value = sum(edge.weight * edge.previous.value for edge in self.in_edges(node))
                     node.value = node.activation(value)
-                yield EvalForwardStepResult(StepType.Forward, layer=layer)
+                yield EvalForwardStepResult(StepType.Forward,
+                                            layer=layer,
+                                            values=layer.values,
+                                            )
         # Yeld the result back to the caller.
         # We need a better protocol for this.
         yield EvalOutputStepResult(StepType.Output,

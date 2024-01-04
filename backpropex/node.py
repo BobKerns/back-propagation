@@ -16,7 +16,8 @@ Nodes are differentiated by layer type:
 """
 
 
-from typing import Optional, TYPE_CHECKING
+
+from backpropex.types import NPArray
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 if TYPE_CHECKING:
     from backpropex.layer import Layer

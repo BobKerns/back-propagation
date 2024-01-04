@@ -79,7 +79,7 @@ from typing import Protocol
 import numpy as np
 from typing import cast
 
-type NPArray = NDArray[np.float_]
+from backpropex.types import NPArray
 
 _registry: dict[str, 'LossFunction'] = {}
 def register(af: 'LossFunction'):
@@ -87,6 +87,7 @@ def register(af: 'LossFunction'):
     Register an Loss function.
     """
     _registry[af.name] = af
+    return af
 
 def get(name: str) -> 'LossFunction|None':
     """

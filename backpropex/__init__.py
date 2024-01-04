@@ -1,3 +1,4 @@
+from .types import *
 from .activation import *
 from .loss import *
 from .layer import *

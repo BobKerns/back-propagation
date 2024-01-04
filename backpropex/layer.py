@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import Optional
 
+from backpropex.types import NPArray
 from backpropex.activation import ACT_ReLU, ActivationFunction
 from backpropex.node import Bias, Hidden, Input, Node, Output
 
@@ -119,4 +120,4 @@ class Layer:
     def __repr__(self):
         return f'{self.layer_type} {self.activation.name}({len(self.nodes)})'
 
-__all__ = ['LayerType', 'Layer']
+__all__ = ['Layer']

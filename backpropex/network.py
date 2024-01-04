@@ -13,10 +13,11 @@ from matplotlib.patches import FancyBboxPatch
 
 from networkx import DiGraph, draw_networkx_edges, draw_networkx_nodes
 import numpy as np
+
+from backpropex.types import NPArray
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 from backpropex.edge import Edge
 from backpropex.layer import Layer, LayerType
-
 from backpropex.loss import LossFunction, MeanSquaredError
 from backpropex.node import Node
 

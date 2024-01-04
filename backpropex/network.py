@@ -1,5 +1,27 @@
+"""
+ A neural network. This module contains the `Network` class, which represents
+    a neural network. The network is represented as a directed graph, with the
+    nodes representing the neurons and the edges representing the connections
+    between the neurons.
 
-from collections import namedtuple
+    The network is drawn using matplotlib, and the network can be evaluated
+    for a given input, and the result of the evaluation is returned as a
+    named tuple.
+
+    The network can be trained using backpropagation. The network is trained
+    using a set of training data, and the network is updated using the
+    gradient descent algorithm.
+
+    The network can be drawn during training, and the progress of the training
+    can be monitored.
+
+    This is not a general-purpose neural network library. It is intended to
+    be used as a teaching tool, to demonstrate how neural networks work.
+    It is not optimized for speed, and it is not optimized for memory usage.
+    Very little vectorization is used, so it will appear very different from
+    other examples you may have seen.
+"""
+
 from contextlib import contextmanager
 from functools import cached_property
 from typing import Any, Generator, NamedTuple, Optional, Protocol, Sequence, cast

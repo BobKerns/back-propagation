@@ -143,6 +143,7 @@ class GraphProtocol(Protocol):
                  ) -> None:
         ...
 
+@runtime_checkable
 class LossFunction(Protocol):
     """
     The protocol for an Loss function.
@@ -155,6 +156,7 @@ class LossFunction(Protocol):
     def derivative(self, actual: NPFloats, expected: NPFloats, /) -> NPFloats:
         ...
 
+@runtime_checkable
 class ActivationFunction(Protocol):
     """
     The protocol for an activation function.

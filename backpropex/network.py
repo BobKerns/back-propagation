@@ -30,15 +30,17 @@ import re
 
 import numpy as np
 
-from backpropex.types import (
+from backpropex.steps import (
     EvalOutputStepResult,
     EvalStepResultAny,
     InitStepResult,
-    NetProtocol,
     StepType,
     EvalForwardStepResult, EvalInputStepResult,
+)
+from backpropex.types import (
     LayerType, FloatSeq, NetTuple,
 )
+from backpropex.protocols import NetProtocol
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 from backpropex.edge import Edge
 from backpropex.layer import Layer

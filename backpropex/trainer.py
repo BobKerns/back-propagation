@@ -11,16 +11,18 @@ from typing import Any, Generator, Optional, cast
 import numpy as np
 
 from backpropex.loss import LossFunction, MeanSquaredError
-from backpropex.types import (
+from backpropex.steps import (
+    StepType, InitStepResult,
     EvalForwardStepResult, EvalInputStepResult, EvalOutputStepResult,
-    EvalStepResultAny, FloatSeq, NPFloats,
-    NetProtocol, TrainProtocol,
-    StepType,
-    InitStepResult, TrainForwardStepResult, TrainInputStepResult,
-    TrainLossStepResult, TrainOutputStepResult, TrainStepResultAny,
+    TrainForwardStepResult, TrainInputStepResult,
+    TrainLossStepResult, TrainOutputStepResult,
+    EvalStepResultAny, TrainStepResultAny,
+)
+from backpropex.types import (
+    FloatSeq, NPFloats,
     TrainingData, TrainingInfo,
 )
-
+from backpropex.protocols import NetProtocol, TrainProtocol
 
 class Trainer(TrainProtocol):
     """

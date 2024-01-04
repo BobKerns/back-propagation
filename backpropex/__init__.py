@@ -4,6 +4,8 @@ from .loss import *
 from .layer import *
 from .edge import *
 from .node import *
+from .steps import *
+from .protocols import *
 from .network import *
 from .netgraph import *
 from .trainer import *

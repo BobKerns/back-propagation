@@ -13,14 +13,22 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.patches import FancyBboxPatch
 
-from networkx import DiGraph, draw_networkx_edges, draw_networkx_nodes, overall_reciprocity # type: ignore
+from networkx import (
+     draw_networkx_edges, # type: ignore
+     draw_networkx_nodes, # type: ignore
+ )
 
 from backpropex.node import Input, Node, Output
 from backpropex.types import (
-    EvalStepResultAny, FloatSeq,
-    EvalProtocol, InitStepResult, StepTypeAny, TrainProtocol, NetProtocol,
-    StepResult, StepType, TrainLossStepResult, TrainStepResult, TrainStepResultAny,
-    TrainingData,
+    FloatSeq, TrainingData
+)
+from backpropex.steps import (
+    StepType,
+    InitStepResult, TrainLossStepResult, TrainStepResult,
+    StepResultAny, EvalStepResultAny, TrainStepResultAny,
+)
+from backpropex.protocols import (
+    EvalProtocol, TrainProtocol, NetProtocol,
 )
 
 # Constants for drawing the network
@@ -97,7 +105,7 @@ class NetGraph(EvalProtocol):
     coolwarms: Sequence[Colormap] = colormaps.get_cmap('coolwarm'),
     coolwarm = coolwarms[0]
 
-    def draw(self, result: StepResult[StepTypeAny], /, *, label: str="Initial State"):
+    def draw(self, result: StepResultAny, /, *, label: str="Initial State"):
         """
         Draw the network using matplotlib.
         """
@@ -354,7 +362,7 @@ class NetGraph(EvalProtocol):
                 epochs: int=1000,
                 learning_rate: float=0.1,
                 label: Optional[str] = None
-                ) -> Generator[EvalStepResultAny|TrainStepResultAny, Any, None]:
+                ) -> Generator[StepResultAny, Any, None]:
         """
         """
         if self.trainer is None:
@@ -376,6 +384,7 @@ class NetGraph(EvalProtocol):
         for step in self.net(data):
             self.draw(step, label=label or 'Initial State')
             yield step
+
     def train(self, data: TrainingData, /, *,
                 epochs: int=1000,
                 learning_rate: float=0.1

@@ -24,7 +24,7 @@
 
 from contextlib import contextmanager
 from functools import cached_property
-from typing import Any, Generator, NamedTuple, Optional, Protocol, Sequence, cast
+from typing import Any, Generator, NamedTuple, Optional, Sequence, cast
 import re
 import math
 from matplotlib import pyplot as plt
@@ -37,7 +37,18 @@ from matplotlib.patches import FancyBboxPatch
 from networkx import DiGraph, draw_networkx_edges, draw_networkx_nodes  # type: ignore
 import numpy as np
 
-from backpropex.types import LayerType, NPFloats, FloatSeq
+from backpropex.types import (
+    EvalOutputStepResult,
+    EvalStepResultAny,
+    StepType,
+    EvalForwardStepResult, EvalInputStepResult, LayerType, NPFloats, FloatSeq, NetTuple,
+    TrainForwardStepResult,
+    TrainInputStepResult,
+    TrainLossStepResult,
+    TrainOutputStepResult,
+    TrainStepResultAny,
+    TrainingInfo
+)
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 from backpropex.edge import Edge
 from backpropex.layer import Layer
@@ -65,10 +76,6 @@ def plen(p: tuple[float, float], n: tuple[float, float]) -> float:
     y2 = (p[1] - n[1]) ** 2.0
     return math.sqrt(x2 + y2)
 
-class NetTuple(Protocol):
-    """Constructor for input or output named tuples"""
-    def __call__(self, *args: float) -> tuple[float, ...]:
-        ...
 class Network:
     """
     A neural network.
@@ -479,28 +486,7 @@ class Network:
     def show(self, label: str):
         self.draw(label=label)
         return label
-    def __call__(self, input: FloatSeq, /, *,
-                 label: Optional[str] = None
-                 ) -> Generator[Any, Any, None]:
-        """
-        Evaluate the network for a given input. Returns a generator that produces
-        diagrams of the network as it is evaluated. The final value is the output
-        from the network as a named tuple.
-        """
-        layer = self.layers[0]
-        layer.values = input
-        extra = f': {label}' if label is not None else ''
-        with self.step_active(layer, message="Setting input"):
-            yield self.show(label=f'{layer.label}{extra}')
-        for layer in self.layers[1:]:
-            with self.step_active(layer, message=f'Forward{extra}'):
-                for node in layer.real_nodes:
-                    value = sum(edge.weight * edge.previous.value for edge in self.edges)
-                    node.value = node.activation(value)
-                yield self.show(label=f'Forward: {layer.label}{extra}')
-        # Yeld the result back to the caller.
-        # We need a better protocol for this.
-        yield self.output_type(*self.output_layer.values)
+
 
     @contextmanager
     def step_active(self, layer: Layer, /, *, message: Optional[str] = None):
@@ -550,24 +536,78 @@ class Network:
         yield loss
         self.loss = None
 
+    def __call__(self, input: FloatSeq, /, *,
+                 label: Optional[str] = None
+                 ) -> Generator[EvalStepResultAny, Any, None]:
+        """
+        Evaluate the network for a given input. Returns a generator that produces
+        diagrams of the network as it is evaluated. The final value is the output
+        from the network as a named tuple.
+        """
+        layer = self.layers[0]
+        layer.values = input
+        extra = f': {label}' if label is not None else ''
+        with self.step_active(layer, message="Setting input"):
+            self.show(label=f'{layer.label}{extra}')
+            in_tuple = self.input_type(*input)
+            yield EvalInputStepResult(StepType.Input, layer=layer, input=in_tuple)
+        for layer in self.layers[1:]:
+            with self.step_active(layer, message=f'Forward{extra}'):
+                for node in layer.real_nodes:
+                    value = sum(edge.weight * edge.previous.value for edge in self.edges)
+                    node.value = node.activation(value)
+                self.show(label=f'Forward: {layer.label}{extra}')
+                yield EvalForwardStepResult(StepType.Forward, layer=layer)
+        # Yeld the result back to the caller.
+        # We need a better protocol for this.
+        yield EvalOutputStepResult(StepType.Output,
+                                   layer=self.output_layer,
+                                   output=self.output_type(*self.output))
+
     def train_one(self, input: FloatSeq, expected: FloatSeq, /,
                   datum_number: int = 0, datum_max: int = 1,
-                  ) -> Generator[Any, Any, None]:
+                  ) -> Generator[TrainStepResultAny, Any, None]:
         """
         Train the network for a given input and expected output.
         """
         input = np.array(input)
         expected = np.array(expected)
         with self.training_datum(datum_number, datum_max, input, expected):
+            training_info: TrainingInfo = TrainingInfo(epoch=self.epoch_number or 0,
+                                         epoch_max=self.epoch_max,
+                                         datum_no=datum_number,
+                                         datum_max=datum_max,
+                                         datum=(input, expected))
             # Forward pass
-            yield from self(input)
+            def map_step(step: EvalStepResultAny):
+                """Extemd the eval step with training info."""
+                match(step):
+                    case EvalInputStepResult():
+                        return TrainInputStepResult(StepType.TrainInput,
+                                                    layer=step.layer,
+                                                    input=step.input,
+                                                    **training_info)
+                    case EvalForwardStepResult():
+                        return TrainForwardStepResult(StepType.TrainForward,
+                                                    layer=step.layer,
+                                                    **training_info)
+                    case EvalOutputStepResult():
+                        return TrainOutputStepResult(StepType.TrainOutput,
+                                                    layer=step.layer,
+                                                    output=step.output,
+                                                    **training_info)
+            yield from (map_step(r) for r in self(input))
             # Backward pass
             layer = self.layers[-1]
-            yield self.show(label=f'Backward: {layer.label}')
-            for layer in reversed(self.layers[0:-1]):
-                for node in layer.real_nodes:
-                    value = sum(edge.weight * edge.next.value for edge in self.edges)
-                    print(f'TODO: Node {node.idx} value={value:.2f}')
+            output = self.output_array
+            loss = self.loss_function(output, expected)
+            with self.training_loss(output, expected) as loss:
+                self.show(label=f'Backward: {layer.label}')
+                yield TrainLossStepResult(StepType.TrainLoss, layer=layer, loss=loss, **training_info)
+                for layer in reversed(self.layers[0:-1]):
+                    for node in layer.real_nodes:
+                        value = sum(edge.weight * edge.next.value for edge in self.edges)
+                        print(f'TODO: Node {node.idx} value={value:.2f}')
 
     def backpropagate(self, output: NPFloats, expected: NPFloats, /):
         """
@@ -653,8 +693,13 @@ class Network:
 
     @property
     def output(self):
-        """The input nodes of this network."""
+        """The output values of this network as a namedtuple."""
         return self.output_type(*(n.value for n in self.output_layer.real_nodes))
+
+    @property
+    def output_array(self):
+        """The output values of this network as an array."""
+        return np.array([n.value for n in self.output_layer.real_nodes])
     @property
     def hidden_layers(self):
         """The hidden layers of this network."""

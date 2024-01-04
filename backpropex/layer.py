@@ -3,21 +3,11 @@ Neural Networ Layer
 """
 
 from collections.abc import Sequence
-from enum import StrEnum
-from typing import Optional
+from typing import Any, Optional
 
 from backpropex.types import FloatSeq, LayerType
 from backpropex.activation import ACT_ReLU, ActivationFunction
 from backpropex.node import Bias, Hidden, Input, Node, Output
-
-
-class LayerType(StrEnum):
-    """
-    The type of a layer in a neural network.
-    """
-    Input = "Input"
-    Hidden = "Hidden"
-    Output = "Output"
 
 class Layer:
     """One layer in a neural network."""
@@ -64,13 +54,13 @@ class Layer:
             case LayerType.Output:
                 offset = (max_layer_size - nodes + 2) / 2\
 
-        def node(idx: Optional[int] = None, is_bias: bool = False, **kwargs):
+        def node(idx: int = 0, is_bias: bool = False, **kwargs: Any):
             """Construct a suitable node for this layer."""
             position = next(positions)
-            pos = (self.position, position + offset)
+            pos = (float(self.position), position + offset)
             if (is_bias):
                 return Bias(pos, layer=self)
-            name = None if names is None else names[idx]
+            name = None if names is None else names[idx] or f'{self.position}_{idx}'
             match layer_type:
                 case LayerType.Input:
                     return Input(pos, layer=self, idx=idx, name=name, **kwargs)
@@ -78,13 +68,12 @@ class Layer:
                     return Output(pos, layer=self, idx=idx, activation=activation, name=name, **kwargs)
                 case LayerType.Hidden:
                     return Hidden(pos, layer=self, idx=idx, activation=activation, name=name, **kwargs)
-                case _:
-                    raise ValueError(f'Unknown layer type: {layer_type}')
-        bias = []
         match layer_type:
             case LayerType.Input | LayerType.Hidden:
                 self.bias = node(is_bias=True)
                 bias = [self.bias]
+            case LayerType.Output:
+                bias = []
         self.nodes = bias + [node(idx) for idx in range(nodes)]
 
     @property

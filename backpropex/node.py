@@ -16,6 +16,8 @@ Nodes are differentiated by layer type:
 """
 
 
+from typing import Any, Optional, TYPE_CHECKING
+import math
 
 from backpropex.types import NPFloats
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
@@ -28,13 +30,16 @@ class Node:
     One node in the network.
     """
     # The value of this node.
-    value: float = 0.0
+    _value: float = 0.0
     # The graphical logical position of this node in the network.
     position: tuple[float, float]
     idx: int
     layer: 'Layer'
     # The name of this node. Primarily for output nodes.
     name: Optional[str]
+
+    activation: ActivationFunction
+
     gradient: Optional[NPFloats] = None
 
     @property
@@ -42,25 +47,35 @@ class Node:
         """Is this node a bias node?"""
         return False
 
-    def __init__(self, position: tuple[int, int], /, *,
+    def __init__(self, position: tuple[float, float], /, *,
                  idx: int=-1,
-                 layer: 'Layer'=None,
+                 layer: 'Layer',
                  name: Optional[str]=None):
         self.position = position
-        self.idx = idx if idx >= 0 else position[1]
+        self.idx = math.floor(idx if idx >= 0 else position[1])
         self.layer = layer
-        self.name = name
+        self.name = name if name is not None else f'{layer.position}_{self.idx}'
 
     @property
-    def label(self) -> setattr:
+    def label(self) -> str:
         """The label for this node."""
         return f'{self.value:.2f}'
+
+    @property
+    def value(self) -> float:
+        """The value of this node."""
+        return self._value
+
+    @value.setter
+    def value(self, value: float):
+        """The value of this node."""
+        self._value = float(value)
 
 class Input(Node):
     """
     An input node in the network.
     """
-    def __init__(self, position: tuple[int, int], /, **kwargs):
+    def __init__(self, position: tuple[float, float], /, **kwargs: Any):
         super().__init__(position, **kwargs)
 
     def __repr__(self) -> str:
@@ -68,13 +83,13 @@ class Input(Node):
 
 class Hidden(Node):
     """
-    An output node in the network.
+    An output node in the network.--
     """
     # The activation function for this node.
     activation: ActivationFunction
-    def __init__(self, position: tuple[int, int], /, *,
+    def __init__(self, position: tuple[float, float], /, *,
                  activation: ActivationFunction=ACT_ReLU,
-                 **kwargs):
+                 **kwargs: Any):
         super().__init__(position, **kwargs)
         self.activation = activation
 
@@ -88,12 +103,10 @@ class Output(Node):
     # The activation function for this node.
     activation: ActivationFunction
 
-    # The name of this node.
-    name: Optional[str]
-    def __init__(self, position: tuple[int, int], /, *,
+    def __init__(self, position: tuple[float, float], /, *,
                  activation: ActivationFunction=ACT_Sigmoid,
                  name: Optional[str] = None,
-                **kwargs
+                **kwargs: Any
                  ):
         super().__init__(position, **kwargs)
         self.activation = activation
@@ -108,7 +121,7 @@ class Bias(Node):
     """
     A bias node in the network.
     """
-    def __init__(self, position: tuple[int, int], /, **kwargs):
+    def __init__(self, position: tuple[float, float], /, **kwargs: Any):
         super().__init__(position, **kwargs)
     @property
     def is_bias(self) -> bool:

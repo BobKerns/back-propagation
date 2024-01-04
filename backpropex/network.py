@@ -26,9 +26,9 @@ from contextlib import contextmanager
 
 from networkx import DiGraph
 from typing import Any, Generator, NamedTuple, Optional, Sequence, cast
-import re
 
 import numpy as np
+from backpropex.builder import DefaultBuilder, sanitize
 
 from backpropex.steps import (
     EvalOutputStepResult,
@@ -38,13 +38,11 @@ from backpropex.steps import (
     EvalForwardStepResult, EvalInputStepResult,
 )
 from backpropex.types import (
-    LayerType, FloatSeq, NetTuple,
+    FloatSeq, NetTuple,
 )
-from backpropex.protocols import NetProtocol
-from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
+from backpropex.protocols import Builder, NetProtocol
 from backpropex.edge import Edge
 from backpropex.layer import Layer
-from backpropex.loss import LossFunction, MeanSquaredError
 from backpropex.node import Node
 
 def _ids():
@@ -62,13 +60,14 @@ class Network(NetProtocol):
     graph: DiGraph = DiGraph()
     input_type: NetTuple
     output_type: NetTuple
+    layers: Sequence[Layer]
+    max_layer_size: int
+    name: str
 
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
-                 loss_function: LossFunction=MeanSquaredError,
-                 activations: Optional[Sequence[ActivationFunction]]=None,
-                 input_names: Optional[Sequence[str]]=None,
-                 output_names: Optional[Sequence[str]]=None,
+                 builder: Optional[Builder|type[Builder]] = DefaultBuilder,
+                 **kwargs: Any
                  ):
         """
         A neural network.
@@ -78,86 +77,29 @@ class Network(NetProtocol):
         :param activation_functions: The activation function for each layer.
         """
         self.net = self
-        if activations is None:
-            activations = [ACT_ReLU] * (len(layers) - 1) + [ACT_Sigmoid]
-        self.max_layer_size = max(layers)
+
         self.name = name if name is not None else f'Network_{next(ids)}'
 
-        def node_names(ltype: LayerType):
-            if ltype == LayerType.Input:
-                if input_names is None:
-                    return [f'In[{idx}]' for idx in range(layers[0])]
-                return input_names
-            if ltype == LayerType.Output:
-                if output_names is None:
-                    return [f'Out[{idx}]' for idx in range(layers[-1])]
-                return output_names
-            return None
-        def make_layer(idx: int, nodes: int, activation: ActivationFunction):
-            ltype = self.layer_type(idx, len(layers))
-            return Layer(nodes,
-                    position=idx,
-                    activation=activation,
-                    max_layer_size=self.max_layer_size,
-                    names=node_names(ltype),
-                    layer_type=ltype)
-        self.layers = [
-            make_layer(idx, nodes, activation)
-            for nodes, activation, idx
-            in zip(layers, activations, range(len(layers)))
-        ]
-        # Label the layers
-        self.layers[0].label = 'Input'
-        self.layers[-1].label = 'Output'
-        for idx, layer in enumerate(self.layers[1:-1]):
-            layer.label = f'Hidden[{idx}]'
-        # Connect the layer nodes
-        prev: Layer = self.layers[0]
-        for layer in self.layers[1:]:
-            self.connect_layers(prev, layer)
-            prev = layer
+        if isinstance(builder, type):
+            builder()(self, *layers, **kwargs)
+        elif isinstance(builder, Builder):
+            builder(self, *layers, **kwargs)
+        else:
+            raise TypeError(f'Invalid builder type: {builder}')
 
-        self.loss_function = loss_function
+        self.max_layer_size = max(len(layer) for layer in self.layers)
+        self.input_type = self.mk_namedtuple('input', self.input_layer)
+        self.output_type = self.mk_namedtuple('output', self.output_layer)
 
-        # We are all set up, so let's define our input and output.
-        def sanitize(name: str) -> str:
-            return '_'.join((s for s in re.split(r'[^a-zA-Z0-9_]+', name) if s != ''))
+
+    def mk_namedtuple(self, suffix: str, layer: Layer) -> NetTuple:
         fields = [
             (sanitize(node.name), float)
             for node
-            in self.input_layer.real_nodes
+            in layer.real_nodes
             if node.name is not None
         ]
-        self.input_type = NamedTuple(f'{sanitize(self.name)}_input', fields)
-        fields = [
-            (sanitize(node.name), float)
-            for node
-            in self.output_layer.real_nodes
-            if node.name is not None
-        ]
-        self.output_type = NamedTuple(f'{sanitize(self.name)}_output', fields)
-    def layer_type(self, idx: int, nlayers: int = -1):
-        match idx:
-            case 0:
-                return LayerType.Input
-            case _ if idx == nlayers - 1:
-                return LayerType.Output
-            case _:
-                return LayerType.Hidden
-
-    def connect_layers(self, prev: Layer, next: Layer):
-        """
-        Connect two layers in the network.
-        """
-        psize = len(prev.nodes)
-        nsize = len(next.nodes)
-        # Initialize the edge weights by He-et-al initialization
-        w = np.random.randn(nsize, psize) * np.sqrt(2 / psize)
-        for (pidx, node) in enumerate(prev.nodes):
-            for (nidx, next_node) in enumerate(next.real_nodes):
-                edge = Edge(node, next_node, initial_weight=w[nidx][pidx])
-                self.graph.add_edge(node, next_node, edge=edge) # type: ignore
-
+        return NamedTuple(f'{sanitize(self.name)}_{suffix}', fields)
     @contextmanager
     def step_active(self, layer: Layer, /):
         """

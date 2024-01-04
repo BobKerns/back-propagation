@@ -169,4 +169,16 @@ class ActivationFunction(Protocol):
     def derivative(self, x: float) -> float:
         ...
 
-__all__ = ['EvalProtocol', 'NetProtocol', 'TrainProtocol', 'GraphProtocol', 'LossFunction', 'ActivationFunction']
+@runtime_checkable
+class Builder(Protocol):
+    """
+    The protocol for a builder.
+    """
+    def __call__(self, net: NetProtocol, *args: Any, **kwargs: Any) -> None:
+        ...
+
+__all__ = [
+    'EvalProtocol', 'NetProtocol', 'TrainProtocol', 'GraphProtocol',
+    'LossFunction', 'ActivationFunction',
+    'Builder'
+]

@@ -7,5 +7,6 @@ from .edge import *
 from .layer import *
 from .steps import *
 from .network import *
+from .builder import *
 from .netgraph import *
 from .trainer import *

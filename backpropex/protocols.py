@@ -2,7 +2,7 @@
 Protocols to allow the various classes to collaborate.
 """
 
-from typing import Sequence, Optional, runtime_checkable, Protocol, TYPE_CHECKING, Any, Generator
+from typing import Sequence, Optional, overload, runtime_checkable, Protocol, TYPE_CHECKING, Any, Generator
 from networkx import DiGraph
 
 from backpropex.types import (
@@ -18,10 +18,16 @@ if TYPE_CHECKING:
     from backpropex.layer import Layer
     from backpropex.edge import Edge
     from backpropex.node import Node
+    from backpropex.loss import LossFunction
 
 
 @runtime_checkable
 class EvalProtocol(Protocol):
+    """
+    A neural network that can be evaluated.
+
+    This is the public protocol to evaluate a network on a given input.
+    """
     def __call__(self, input: FloatSeq, /, *,
                 label: Optional[str] = None
                 ) -> Generator[EvalStepResultAny|InitStepResult, Any, None]:
@@ -30,6 +36,9 @@ class EvalProtocol(Protocol):
 
 @runtime_checkable
 class NetProtocol(EvalProtocol, Protocol):
+    """
+    A neural network. This is the public protocol by which other classes interact with the network.
+    """
     net: 'NetProtocol'
     graph: DiGraph = DiGraph()
     layers: Sequence['Layer']
@@ -40,11 +49,6 @@ class NetProtocol(EvalProtocol, Protocol):
     # The layer that is currently being evaluated
     active_layer: Optional['Layer'] = None
     active_message: Optional[str] = None
-
-    def __call__(self, input: FloatSeq, /, *,
-                label: Optional[str] = None
-                ) -> Generator[EvalStepResultAny, Any, None]:
-        ...
 
     @property
     def labels(self) -> dict['Node', str]:
@@ -104,9 +108,63 @@ class NetProtocol(EvalProtocol, Protocol):
 
 @runtime_checkable
 class TrainProtocol(Protocol):
+    """
+    A trainer for neural networks.
+    This composes with the network to train it.
+    """
+    def __init__(self, network: NetProtocol, /, *, loss_function: 'LossFunction'):
+        ...
     def __call__(self, data: TrainingData, /, *,
               epochs: int=1000,
               learning_rate: float=0.1
               ) -> Generator[TrainStepResultAny|InitStepResult, Any, None]:
         ...
     net: NetProtocol
+
+@runtime_checkable
+class GraphProtocol(Protocol):
+    """
+    A wrapper for a network to draw it as a graph. This composes with the network,
+    either with or without a Trainer.
+    """
+    @overload
+    def __init__(self, net: NetProtocol, /, *,
+                 margin: float=0.13,
+                 ) -> None:
+        ...
+    @overload
+    def __init__(self, trainer: TrainProtocol, /, *,
+                 margin: float=0.13,
+                 ) -> None:
+        ...
+
+    def __init__(self, proxy: NetProtocol|TrainProtocol, /, *,
+                 margin: float=0.13,
+                 ) -> None:
+        ...
+
+class LossFunction(Protocol):
+    """
+    The protocol for an Loss function.
+    """
+
+    name: str
+    def __call__(self, actual: NPFloats, expected: NPFloats, /) -> float:
+        ...
+
+    def derivative(self, actual: NPFloats, expected: NPFloats, /) -> NPFloats:
+        ...
+
+class ActivationFunction(Protocol):
+    """
+    The protocol for an activation function.
+    """
+
+    name: str
+    def __call__(self, x: float) -> float:
+        ...
+
+    def derivative(self, x: float) -> float:
+        ...
+
+__all__ = ['EvalProtocol', 'NetProtocol', 'TrainProtocol', 'GraphProtocol', 'LossFunction', 'ActivationFunction']

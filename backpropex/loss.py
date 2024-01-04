@@ -74,11 +74,11 @@ I have not verified this either.
 Etc.
 
 """
-from typing import Protocol
 import numpy as np
 from typing import cast
 
 from backpropex.types import NPFloats
+from backpropex.protocols import LossFunction
 
 _registry: dict[str, 'LossFunction'] = {}
 def register(af: 'LossFunction'):
@@ -99,18 +99,6 @@ def names() -> list[str]:
     Get the names of all Loss functions.
     """
     return list(_registry.keys())
-
-class LossFunction(Protocol):
-    """
-    The protocol for an Loss function.
-    """
-
-    name: str
-    def __call__(self, actual: NPFloats, expected: NPFloats, /) -> float:
-        ...
-
-    def derivative(self, actual: NPFloats, expected: NPFloats, /) -> NPFloats:
-        ...
 
 def loss(cls: type[LossFunction]) -> LossFunction:
     """
@@ -624,3 +612,48 @@ class PoissonNLLLog:
 
     def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.exp(actual) - expected / len(actual)
+
+__all__ = [
+    'MSE',
+    'CrossEntropy',
+    'BinaryCrossEntropy',
+    'CategoricalCrossEntropy',
+    'SparseCategoricalCrossEntropy',
+    'KLDivergence',
+    'KLDivergenceCategorical',
+    'KLDivergenceMultinomial',
+    'KLDivergencePoisson',
+    'KLDivergenceUniform',
+    'KLDivergenceWeighted',
+    'KLDivergenceWeightedBernoulli',
+    'KLDivergenceWeightedCategorical',
+    'KLDivergenceWeightedGaussian',
+    'KLDivergenceWeightedMultinomial',
+    'KLDivergenceWeightedPoisson',
+    'KLDivergenceWeightedUniform',
+    'MeanAbsoluteError',
+    'MeanAbsolutePercentageError',
+    'MeanAbsoluteLogarithmicError',
+    'MeanSquaredLogarithmicError',
+    'MeanSquaredPercentageError',
+    'MeanSquaredError',
+    'Poisson',
+    'CosineSimilarity',
+    'Hinge',
+    'SquaredHinge',
+    'LogCosh',
+    'Huber',
+    'Log',
+    'Quantile',
+    'LogPoisson',
+    'KLDivergenceGaussian',
+    'PoissonNLL',
+    'KLDivergenceBernoulli',
+    'CategoricalHinge',
+    'SquaredLog',
+    'PoissonNLLLog',
+    'register',
+    'get',
+    'names',
+    'loss',
+]

@@ -10,7 +10,8 @@ that they are correct, but they are interesting, and I have not spotted any erro
 in the ones I have examined and used.
 """
 import math
-from typing import Protocol
+
+from backpropex.protocols import ActivationFunction
 
 _registry: dict[str, 'ActivationFunction'] = {}
 def register(af: 'ActivationFunction'):
@@ -30,17 +31,6 @@ def names() -> list[str]:
     Get the names of all activation functions.
     """
     return list(_registry.keys())
-class ActivationFunction(Protocol):
-    """
-    The protocol for an activation function.
-    """
-
-    name: str
-    def __call__(self, x: float) -> float:
-        ...
-
-    def derivative(self, x: float) -> float:
-        ...
 
 def activation(cls: type[ActivationFunction]) -> ActivationFunction:
     """
@@ -298,3 +288,31 @@ class ACT_Softmin:
 
     def derivative(self, x: float) -> float:
         return self(x) * (1.0 - self(x))
+
+__all__ = [
+    'ACT_ReLU',
+    'ACT_Softmax',
+    'ACT_Sigmoid',
+    'ACT_Tanh',
+    'ACT_Identity',
+    'ACT_LeakyReLU',
+    'ACT_ELU',
+    'ACT_Softplus',
+    'ACT_Swish',
+    'ACT_SiLU',
+    'ACT_Softsign',
+    'ACT_SQNL',
+    'ACT_BentIdentity',
+    'ACT_Gaussian',
+    'ACT_Sinc',
+    'ACT_Sinusoid',
+    'ACT_SincNet',
+    'ACT_SoftExponential',
+    'ACT_SoftClipping',
+    'ACT_SoftShrink',
+    'ACT_Softmin',
+    'register',
+    'get',
+    'names',
+    'activation',
+]

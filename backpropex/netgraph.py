@@ -28,7 +28,7 @@ from backpropex.steps import (
     StepResultAny, EvalStepResultAny, TrainStepResultAny,
 )
 from backpropex.protocols import (
-    EvalProtocol, TrainProtocol, NetProtocol,
+    EvalProtocol, GraphProtocol, TrainProtocol, NetProtocol,
 )
 
 # Constants for drawing the network
@@ -44,7 +44,7 @@ def plen(p: tuple[float, float], n: tuple[float, float]) -> float:
     y2 = (p[1] - n[1]) ** 2.0
     return math.sqrt(x2 + y2)
 
-class NetGraph(EvalProtocol):
+class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     """
     Draw a graph of the network.
 

@@ -155,7 +155,7 @@ class TrainForwardStepResult(TrainStepResult[Literal[StepType.TrainForward]],
 @dataclass
 class TrainOutputStepResult(TrainStepResult[Literal[StepType.TrainOutput]],
                             OutputStepResult[Literal[StepType.TrainOutput]]):
-    output: tuple[float, ...]
+    pass
 
 @dataclass
 class TrainLossStepResult(TrainStepResult[Literal[StepType.TrainLoss]]):

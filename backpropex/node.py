@@ -130,3 +130,5 @@ class Bias(Node):
 
     def __repr__(self):
         return "<1>"
+
+__all__ = ['Node', 'Input', 'Hidden', 'Output', 'Bias']

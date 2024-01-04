@@ -28,4 +28,5 @@ class Edge:
         return f'{self.weight:.2f}'
 
     def __repr__(self):
-        return f'Edge({self.previous} -> {self.next})'
+
+__all__ = ['Edge']

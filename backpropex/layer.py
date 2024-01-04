@@ -118,3 +118,5 @@ class Layer:
 
     def __repr__(self):
         return f'{self.layer_type} {self.activation.name}({len(self.nodes)})'
+
+__all__ = ['LayerType', 'Layer']

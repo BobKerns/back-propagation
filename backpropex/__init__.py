@@ -1,6 +1,6 @@
 from .activation import *
 from .loss import *
-from .layer import LayerType, Layer
-from .edge import Edge
-from .node import Node, Input, Hidden, Output, Bias
-from .network import Network
+from .layer import *
+from .edge import *
+from .node import *
+from .network import *

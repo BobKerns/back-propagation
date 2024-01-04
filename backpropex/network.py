@@ -467,3 +467,5 @@ class Network:
 
     def __repr__(self):
         return f'Network({",".join((str(len(l)) for l in self.layers))}, name={self.name})'
+
+__all__ = ['Network']

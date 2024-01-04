@@ -74,12 +74,11 @@ I have not verified this either.
 Etc.
 
 """
-from numpy.typing import NDArray
 from typing import Protocol
 import numpy as np
 from typing import cast
 
-from backpropex.types import NPArray
+from backpropex.types import NPFloats
 
 _registry: dict[str, 'LossFunction'] = {}
 def register(af: 'LossFunction'):
@@ -107,10 +106,10 @@ class LossFunction(Protocol):
     """
 
     name: str
-    def __call__(self, actual: NPArray, expected: NPArray, /) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats, /) -> float:
         ...
 
-    def derivative(self, actual: NPArray, expected: NPArray, /) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats, /) -> NPFloats:
         ...
 
 def loss(cls: type[LossFunction]) -> LossFunction:
@@ -128,10 +127,10 @@ class MSE:
     """
     name: str = 'MSE'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(np.square(actual - expected))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return 2 * (actual - expected) / len(actual)
 
 from numpy import log as nplog
@@ -142,11 +141,11 @@ class CrossEntropy:
     """
     name: str = 'CrossEntropy'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, -np.sum(expected * nplog(actual) + (1.0 - expected) * nplog(1.0 - actual))) / len(actual)
 
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return (actual - expected) / (actual * (1 - actual)) / len(actual)
 
 
@@ -158,11 +157,11 @@ class BinaryCrossEntropy:
     name: str = 'BinaryCrossEntropy'
 
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, -np.sum(expected * np.log(actual) + (1 - expected) * np.log(1 - actual))) / len(actual)
 
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return (actual - expected) / (actual * (1 - actual)) / len(actual)
 
 @loss
@@ -172,10 +171,10 @@ class CategoricalCrossEntropy:
     """
     name: str = 'CategoricalCrossEntropy'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return -cast(float, np.sum(expected * np.log(actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -185,10 +184,10 @@ class SparseCategoricalCrossEntropy:
     """
     name: str = 'SparseCategoricalCrossEntropy'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return -cast(float, np.sum(expected * np.log(actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -198,10 +197,10 @@ class KLDivergence:
     """
     name: str = 'KLDivergence'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 @loss
 class KLDivergenceCategorical:
@@ -210,10 +209,10 @@ class KLDivergenceCategorical:
     """
     name: str = 'KLDivergenceCategorical'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -223,10 +222,10 @@ class KLDivergenceMultinomial:
     """
     name: str = 'KLDivergenceMultinomial'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -236,10 +235,10 @@ class KLDivergencePoisson:
     """
     name: str = 'KLDivergencePoisson'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual) - expected + actual)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual + 1 / len(actual)
 
 @loss
@@ -249,10 +248,10 @@ class KLDivergenceUniform:
     """
     name: str = 'KLDivergenceUniform'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.log(expected / actual)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -262,10 +261,10 @@ class KLDivergenceWeighted:
     """
     name: str = 'KLDivergenceWeighted'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -275,10 +274,10 @@ class KLDivergenceWeightedBernoulli:
     """
     name: str = 'KLDivergenceWeightedBernoulli'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual) + (1 - expected) * np.log((1 - expected)) / (1 - actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual + (1 - expected) / (1 - actual) / len(actual)
 
 @loss
@@ -288,10 +287,10 @@ class KLDivergenceWeightedCategorical:
     """
     name: str = 'KLDivergenceWeightedCategorical'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -301,10 +300,10 @@ class KLDivergenceWeightedGaussian:
     """
     name: str = 'KLDivergenceWeightedGaussian'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(np.log(expected / actual) + (np.square(actual) + np.square(expected)) / 2)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -314,10 +313,10 @@ class KLDivergenceWeightedMultinomial:
     """
     name: str = 'KLDivergenceWeightedMultinomial'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -327,10 +326,10 @@ class KLDivergenceWeightedPoisson:
     """
     name: str = 'KLDivergenceWeightedPoisson'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual) - expected + actual)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual + 1 / len(actual)
 
 @loss
@@ -340,10 +339,10 @@ class KLDivergenceWeightedUniform:
     """
     name: str = 'KLDivergenceWeightedUniform'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.log(expected / actual)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -353,10 +352,10 @@ class MeanAbsoluteError:
     """
     name: str = 'MeanAbsoluteError'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.abs(actual - expected)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.sign(actual - expected) / len(actual)
 
 @loss
@@ -366,10 +365,10 @@ class MeanAbsolutePercentageError:
     """
     name: str = 'MeanAbsolutePercentageError'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(np.abs(actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.sign(actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps) / len(actual)
 
 @loss
@@ -379,10 +378,10 @@ class MeanAbsoluteLogarithmicError:
     """
     name: str = 'MeanAbsoluteLogarithmicError'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.abs(np.log(actual + 1) - np.log(expected + 1))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.sign(np.log(actual + 1) - np.log(expected + 1)) / (actual + 1) / len(actual)
 
 @loss
@@ -392,10 +391,10 @@ class MeanSquaredLogarithmicError:
     """
     name: str = 'MeanSquaredLogarithmicError'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.square(np.log(actual + 1) - np.log(expected + 1))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return 2 * (np.log(actual + 1) - np.log(expected + 1)) / (actual + 1) / len(actual)
 
 @loss
@@ -405,10 +404,10 @@ class MeanSquaredPercentageError:
     """
     name: str = 'MeanSquaredPercentageError'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.square((actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return 2 * (actual - expected) / np.maximum(np.abs(expected), np.finfo(np.float64).eps) / len(actual)
 
 @loss
@@ -418,10 +417,10 @@ class MeanSquaredError:
     """
     name: str = 'MeanSquaredError'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.square(actual - expected)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return 2 * (actual - expected) / len(actual)
 
 @loss
@@ -431,10 +430,10 @@ class Poisson:
     """
     name: str = 'Poisson'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(actual - expected * np.log(actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return 1 - expected / actual / len(actual)
 
 @loss
@@ -444,10 +443,10 @@ class CosineSimilarity:
     """
     name: str = 'CosineSimilarity'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(actual * expected)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return expected / len(actual)
 
 @loss
@@ -457,10 +456,10 @@ class Hinge:
     """
     name: str = 'Hinge'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.maximum(0, 1 - actual * expected)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / len(actual)
 
 @loss
@@ -470,10 +469,10 @@ class SquaredHinge:
     """
     name: str = 'SquaredHinge'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.square(np.maximum(0, 1 - actual * expected))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -2 * expected * np.maximum(0, 1 - actual * expected) / len(actual)
 
 @loss
@@ -483,10 +482,10 @@ class LogCosh:
     """
     name: str = 'LogCosh'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.log(np.cosh(actual - expected))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.tanh(actual - expected) / len(actual)
 
 @loss
@@ -496,10 +495,10 @@ class Huber:
     """
     name: str = 'Huber'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.where(np.abs(actual - expected) < 1, 0.5 * np.square(actual - expected), np.abs(actual - expected) - 0.5)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.where(np.abs(actual - expected) < 1, actual - expected, np.sign(actual - expected)) / len(actual)
 
 @loss
@@ -509,10 +508,10 @@ class Log:
     """
     name: str = 'Log'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.log(1 + np.exp(-actual * expected))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / (1 + np.exp(actual * expected)) / len(actual)
 
 @loss
@@ -529,10 +528,10 @@ class Quantile:
         self.name = f'Quantile (q={q})'
         register(self)
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.where(actual >= expected, self.q * (actual - expected), (1 - self.q) * (expected - actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.where(actual >= expected, self.q, 1 - self.q) / len(actual)
 
 @loss
@@ -542,10 +541,10 @@ class LogPoisson:
     """
     name: str = 'LogPoisson'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(np.exp(actual) - actual * expected)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.exp(actual) - expected / len(actual)
 
 @loss
@@ -555,10 +554,10 @@ class KLDivergenceGaussian:
     """
     name: str = 'KLDivergenceGaussian'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(np.log(expected / actual) + (np.square(actual) + np.square(expected)) / 2)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual / len(actual)
 
 @loss
@@ -568,10 +567,10 @@ class PoissonNLL:
     """
     name: str = 'PoissonNLL'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(actual - expected * np.log(actual))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return 1 - expected / actual / len(actual)
 
 @loss
@@ -581,10 +580,10 @@ class KLDivergenceBernoulli:
     """
     name: str = 'KLDivergenceBernoulli'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(expected * np.log(expected / actual) + (1 - expected) * np.log((1 - expected) / (1 - actual)))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / actual + (1 - expected) / (1 - actual) / len(actual)
 
 @loss
@@ -594,10 +593,10 @@ class CategoricalHinge:
     """
     name: str = 'CategoricalHinge'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.maximum(0, 1 - actual * expected)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return -expected / len(actual)
 
 @loss
@@ -607,10 +606,10 @@ class SquaredLog:
     """
     name: str = 'SquaredLog'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return np.sum(np.square(np.log(actual + 1) - np.log(expected + 1))) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return 2 * (np.log(actual + 1) - np.log(expected + 1)) / (actual + 1) / len(actual)
 
 @loss
@@ -620,8 +619,8 @@ class PoissonNLLLog:
     """
     name: str = 'PoissonNLLLog'
 
-    def __call__(self, actual: NPArray, expected: NPArray) -> float:
+    def __call__(self, actual: NPFloats, expected: NPFloats) -> float:
         return cast(float, np.sum(np.exp(actual) - actual * expected)) / len(actual)
 
-    def derivative(self, actual: NPArray, expected: NPArray) -> NPArray:
+    def derivative(self, actual: NPFloats, expected: NPFloats) -> NPFloats:
         return np.exp(actual) - expected / len(actual)

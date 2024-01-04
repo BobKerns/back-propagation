@@ -14,10 +14,10 @@ from matplotlib.patches import FancyBboxPatch
 from networkx import DiGraph, draw_networkx_edges, draw_networkx_nodes
 import numpy as np
 
-from backpropex.types import NPArray
+from backpropex.types import LayerType, NPFloats, FloatSeq
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 from backpropex.edge import Edge
-from backpropex.layer import Layer, LayerType
+from backpropex.layer import Layer
 from backpropex.loss import LossFunction, MeanSquaredError
 from backpropex.node import Node
 
@@ -60,6 +60,8 @@ class Network:
     # The layer that is currently being evaluated
     active_layer: Optional[Layer] = None
     active_message: Optional[str] = None
+    datum_value: Optional[NPFloats] = None
+    datum_expected: Optional[NPFloats] = None
 
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
@@ -283,9 +285,8 @@ class Network:
                 #  Compute the color for the label based on the edge weight
                 #  This matches how the edge is colored
                 weight = edge.weight
-                color = self.coolwarm((weight + 1) / 2)
-                ax.annotate(edge.label, loc,
-                            color=color,
+                color = self.coolwarm(norm(weight))
+                hsv: NPFloats = rgb_to_hsv(color[0:3])
                             horizontalalignment='center',
                             verticalalignment='center',
                             )
@@ -355,9 +356,9 @@ class Network:
     def show(self, label: str):
         self.draw(label=label)
         return label
-    def __call__(self, input: np.array, /, *,
-                 epoch: Optional[int] = None
-                 ) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
+    def __call__(self, input: FloatSeq, /, *,
+                 label: Optional[str] = None
+                 ) -> Generator[Any, Any, None]:
         """
         Evaluate the network for a given input. Returns a generator that produces
         diagrams of the network as it is evaluated. The final value is the output
@@ -396,9 +397,8 @@ class Network:
         self.active_layer = None
         self.active_message = None
 
-    def train_one(self, input: np.array, expected: np.array, /, *,
-                  epoch:int = 0
-                  ) -> Generator[np.ndarray[Any], Any, np.ndarray[Any]]:
+
+    def train_one(self, input: NPFloats, expected: NPFloats, /,
         """
         Train the network for a given input and expected output.
         """

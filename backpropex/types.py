@@ -5,11 +5,13 @@ Separating the type definitions from the code allows the code to be type-checked
 without risking circular imports.
 """
 
+from collections.abc import Sequence
 from enum import StrEnum
 import numpy as np
 from numpy.typing import NDArray
 
-type NPArray = NDArray[np.float_]
+type NPFloats = NDArray[np.float_]
+type FloatSeq = Sequence[float]|NPFloats
 
 class LayerType(StrEnum):
     """

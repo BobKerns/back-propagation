@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import Optional
 
-from backpropex.types import NPArray
+from backpropex.types import FloatSeq, LayerType
 from backpropex.activation import ACT_ReLU, ActivationFunction
 from backpropex.node import Bias, Hidden, Input, Node, Output
 
@@ -100,7 +100,7 @@ class Layer:
         return [n.value for n in self.real_nodes]
 
     @values.setter
-    def values(self, values: list[float]):
+    def values(self, values: FloatSeq):
         for node, value in zip(self.real_nodes, values):
             node.value = value
 

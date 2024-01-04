@@ -17,7 +17,7 @@ Nodes are differentiated by layer type:
 
 
 
-from backpropex.types import NPArray
+from backpropex.types import NPFloats
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 if TYPE_CHECKING:
     from backpropex.layer import Layer
@@ -35,6 +35,7 @@ class Node:
     layer: 'Layer'
     # The name of this node. Primarily for output nodes.
     name: Optional[str]
+    gradient: Optional[NPFloats] = None
 
     @property
     def is_bias(self) -> bool:

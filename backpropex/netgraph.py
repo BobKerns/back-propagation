@@ -4,7 +4,7 @@
 
 from colorsys import hsv_to_rgb, rgb_to_hsv
 from functools import cached_property
-from typing import Generator, Optional, Sequence, Any, cast
+from typing import Generator, Optional, Sequence, Any, cast, overload
 import math
 
 from matplotlib import pyplot as plt, colormaps
@@ -13,11 +13,15 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.patches import FancyBboxPatch
 
-from networkx import DiGraph, draw_networkx_edges, draw_networkx_nodes # type: ignore
+from networkx import DiGraph, draw_networkx_edges, draw_networkx_nodes, overall_reciprocity # type: ignore
 
 from backpropex.node import Input, Node, Output
-from backpropex.types import EvalStepResultAny, FloatSeq, StepType, TrainStepResultAny, TrainingData
-from backpropex.network import Network
+from backpropex.types import (
+    EvalStepResultAny, FloatSeq,
+    EvalProtocol, InitStepResult, StepTypeAny, TrainProtocol, NetProtocol,
+    StepResult, StepType, TrainLossStepResult, TrainStepResult, TrainStepResultAny,
+    TrainingData,
+)
 
 # Constants for drawing the network
 layer_x_offset = 0.085
@@ -32,7 +36,7 @@ def plen(p: tuple[float, float], n: tuple[float, float]) -> float:
     y2 = (p[1] - n[1]) ** 2.0
     return math.sqrt(x2 + y2)
 
-class NetGraph:
+class NetGraph(EvalProtocol):
     """
     Draw a graph of the network.
 
@@ -40,18 +44,37 @@ class NetGraph:
     and exposes the __call__ and train methods of the network, and draws the graph
     after each step.
     """
-    net: Network
+    trainer: Optional[TrainProtocol]
     margin: float
     xscale: float
     yscale: float
 
-    def __init__(self, net: Network, /, *,
+    @overload
+    def __init__(self, net: NetProtocol, /, *,
                  margin: float=0.13,
-                 ):
-        self.net = net
+                 ) -> None:
+        ...
+    @overload
+    def __init__(self, trainer: TrainProtocol, /, *,
+                 margin: float=0.13,
+                 ) -> None:
+        ...
+
+    def __init__(self, proxy: NetProtocol|TrainProtocol, /, *,
+                 margin: float=0.13,
+                 ) -> None:
+        """
+        Initialize the graph drawer for either  a network or a trainer.
+        """
+        if isinstance(proxy, NetProtocol):
+            self.net = proxy
+            self.trainer = None
+        else:
+            self.net = proxy.net
+            self.trainer = proxy
         self.margin = margin
-        self.xscale = 1.0 / (len(net.layers) + 0.4)
-        self.yscale = 1.0 / (net.max_layer_size + 1)
+        self.xscale = 1.0 / (len(self.net.layers) + 0.4)
+        self.yscale = 1.0 / (self.net.max_layer_size + 1)
 
     @cached_property
     def positions(self):
@@ -74,7 +97,7 @@ class NetGraph:
     coolwarms: Sequence[Colormap] = colormaps.get_cmap('coolwarm'),
     coolwarm = coolwarms[0]
 
-    def draw(self, /, *, label: str="Initial State"):
+    def draw(self, result: StepResult[StepTypeAny], /, *, label: str="Initial State"):
         """
         Draw the network using matplotlib.
         """
@@ -93,10 +116,10 @@ class NetGraph:
             self._draw_active(ax)
 
         self._draw_layer_labels(ax)
-        if self.net.datum_expected is not None:
-            self._draw_expected(ax)
-        if self.net.epoch_number is not None:
-            self._draw_epoch(ax)
+        if isinstance(result, TrainStepResult):
+            tresult = cast(TrainStepResultAny, result)
+            self._draw_expected(ax, tresult)
+            self._draw_epoch(ax, tresult)
         norm = Normalize(vmin=minval, vmax=maxval)
         cax1 = fig.add_axes((0.905, 0.50, 0.007, 0.38)) # type: ignore
         cax2 = fig.add_axes((0.905, 0.11, 0.006, 0.38)) # type: ignore
@@ -264,106 +287,134 @@ class NetGraph:
                                     )
             ax.add_patch(fancy)
 
-    def _draw_expected(self, ax: Axes):
+    def _draw_expected(self, ax: Axes, result: TrainStepResultAny):
         """
         Draw the expected output column during a training cycle.
 
         This is only done if the expected output has been made
         available via the context manager method `expected_output()`.
         """
-        if self.net.datum_expected is not None:
-            # expcol is the column for the expected output during training
-            expcol = len(self.net.layers) * self.xscale
-            positions = self.positions
-            # Draw the expected output values next to each output node.
-            for idx, node in enumerate(self.net.output_layer.real_nodes):
-                pos = positions[node]
-                loc = (expcol, pos[1])
-                locarrow = (expcol - 0.011, loc[1] - 0.012)
-                ax.annotate(f'{self.net.datum_expected[idx]:.2f}', loc, # type: ignore
-                            color='red',
-                            horizontalalignment='center',
-                            verticalalignment='center',
-                            )
-                # Draw a left-facing arrow around the expected output
-                fancy = FancyBboxPatch(locarrow, 0.03, 0.025,
-                                        boxstyle='larrow,pad=0.001',
-                                        fc='white', ec='red')
-                ax.add_patch(fancy)
-            # If the loss is available, draw it.
-            # See the context manager method training_loss.
-            if self.net.loss is not None:
-                loss_pos = expcol, layer_y_offset
-                ax.annotate(self.net.loss_function.name, loss_pos, # type: ignore
-                            color='red',
-                            horizontalalignment='center')
-                ax.annotate(f'Loss={self.net.loss:.2f}', (expcol, layer_y2_offset), # type: ignore
-                            color='red',
-                            horizontalalignment='center'
-                            )
+        # expcol is the column for the expected output during training
+        expcol = len(self.net.layers) * self.xscale
+        positions = self.positions
+        # Draw the expected output values next to each output node.
+        for idx, node in enumerate(self.net.output_layer.real_nodes):
+            pos = positions[node]
+            loc = (expcol, pos[1])
+            locarrow = (expcol - 0.011, loc[1] - 0.012)
+            ax.annotate(f'{self.trainer.datum_expected[idx]:.2f}', loc, # type: ignore
+                        color='red',
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                        )
+            # Draw a left-facing arrow around the expected output
+            fancy = FancyBboxPatch(locarrow, 0.03, 0.025,
+                                    boxstyle='larrow,pad=0.001',
+                                    fc='white', ec='red')
+            ax.add_patch(fancy)
+        # If the loss is available, draw it.
+        # See the context manager method training_loss.
+        if isinstance(result, TrainLossStepResult):
+            loss_pos = expcol, layer_y_offset
+            ax.annotate(self.trainer.loss_function.name, loss_pos, # type: ignore
+                        color='red',
+                        horizontalalignment='center')
+            ax.annotate(f'Loss={result.loss:.2f}', (expcol, layer_y2_offset), # type: ignore
+                        color='red',
+                        horizontalalignment='center'
+                        )
 
-    def _draw_epoch(self, ax: Axes):
+    def _draw_epoch(self, ax: Axes, result: TrainStepResultAny):
         figure = ax.figure
         if figure is None:
             raise ValueError('No figure for axes')
-        if self.net.epoch_number is not None:
-            if self.net.datum_number is not None:
-                figure.text(0.90, 0.88, f'Datum {self.net.datum_number+1}/{self.net.datum_max}', # type: ignore
-                            color='red',
-                            horizontalalignment='right',
-                            verticalalignment='bottom',
-                            )
-            figure.text(0.125, 0.88, f'Epoch {self.net.epoch_number+1}/{self.net.epoch_max}', # type: ignore
-                        color='red',
-                        horizontalalignment='left',
-                        verticalalignment='bottom',
-                        )
+        figure.text(0.90, 0.88, f'Datum {result.datum_no+1}/{result.datum_max}', # type: ignore
+                    color='red',
+                    horizontalalignment='right',
+                    verticalalignment='bottom',
+                    )
+        figure.text(0.125, 0.88, f'Epoch {result.epoch+1}/{result.epoch_max}', # type: ignore
+                    color='red',
+                    horizontalalignment='left',
+                    verticalalignment='bottom',
+                    )
 
-    def show(self, label: str):
-        self.draw(label=label)
-        return label
+    @overload
+    def __call__(self, input: FloatSeq, /, *,
+                label: Optional[str] = None
+                ) -> Generator[EvalStepResultAny, Any, None]:
+        ...
+    @overload
+    def __call__(self, data: TrainingData, /, *,
+                epochs: int=1000,
+                learning_rate: float=0.1
+                ) -> Generator[TrainStepResultAny, Any, None]:
+        ...
+    def __call__(self, data: FloatSeq|TrainingData, /, *,
+                epochs: int=1000,
+                learning_rate: float=0.1,
+                label: Optional[str] = None
+                ) -> Generator[EvalStepResultAny|TrainStepResultAny, Any, None]:
+        """
+        """
+        if self.trainer is None:
+            yield from self.eval( cast(FloatSeq, data),
+                                 label=label)
+        else:
+            yield from self.train(cast(TrainingData, data),
+                                  epochs=epochs,
+                                  learning_rate=learning_rate)
+
+    def eval(self, data: FloatSeq, /, *,
+                label: Optional[str] = None,
+            ) -> Generator[EvalStepResultAny, Any, None]:
+        """
+        Evaluate the network for a given input. Returns a generator that produces
+        diagrams of the network as it is evaluated. The final value is the output
+        from the network as a named tuple.
+        """
+        for step in self.net(data):
+            self.draw(step, label=label or 'Initial State')
+            yield step
+    def train(self, data: TrainingData, /, *,
+                epochs: int=1000,
+                learning_rate: float=0.1
+                ) -> Generator[TrainStepResultAny, Any, None]:
+        """
+        Train the network on the given training data.
+        """
+        if self.trainer is None:
+            raise ValueError('Cannot train a network without a trainer')
+        for step in self.trainer(data, epochs=epochs, learning_rate=learning_rate):
+            if isinstance(step, InitStepResult):
+                layer_label = ''
+            else:
+                layer_label = step.layer.label
+            match step.type:
+                case StepType.Initialized:
+                    step_label = f'Initialized'
+                case StepType.TrainInput:
+                    step_label = f'Train Input: {layer_label}'
+                case StepType.TrainForward:
+                    step_label = f'Train Forward: {layer_label}'
+                case StepType.TrainOutput:
+                    step_label = f'Train Output: {layer_label}'
+                case StepType.TrainLoss:
+                    step_label = f'Train Loss: {layer_label}'
+                case StepType.TrainBackward:
+                    step_label = f'Train Backward: {layer_label}'
+                case StepType.TrainOptimize:
+                    step_label = f'Train Optimize: {layer_label}'
+                case StepType.Input:
+                    step_label = f'Eval Input: {layer_label}'
+                case StepType.Forward:
+                    step_label = f'Eval Forward: {layer_label}'
+                case StepType.Output:
+                    step_label = f'Eval Output: {layer_label}'
+            self.draw(step, label=step_label)
+            yield step
 
     def __repr__(self):
         return f'NetGraph({self.net})'
-
-    def __call__(self, input: FloatSeq, /, *,
-                 label: Optional[str] = None
-                 ) -> Generator[EvalStepResultAny, Any, None]:
-        """
-        Evaluate the network on the given input and display graphs of the progress.
-        """
-        extra = f': {label}' if label is not None else ''
-        for step in self.net(input, label=label):
-            match step.type:
-                case StepType.Input:
-                    step_label = f'Input: {step.layer.label}{extra}'
-                case StepType.Forward:
-                    step_label = f'Foward: {step.layer.label}{extra}'
-                case StepType.Output:
-                    step_label = f'Output: {step.layer.label}{extra}'
-            self.draw(label=step_label)
-            yield step
-
-
-    def train(self, data: TrainingData, /, *,
-              epochs: int=1000,
-              learning_rate: float=0.1
-              ) -> Generator[TrainStepResultAny, Any, None]:
-        for step in self.net.train(data, epochs=epochs, learning_rate=learning_rate):
-            match step.type:
-                case StepType.TrainInput:
-                    step_label = f'Train Input: {step.layer.label}'
-                case StepType.TrainForward:
-                    step_label = f'Train Forward: {step.layer.label}'
-                case StepType.TrainOutput:
-                    step_label = f'Train Output: {step.layer.label}'
-                case StepType.TrainLoss:
-                    step_label = f'Train Loss: {step.layer.label}'
-                case StepType.TrainBackward:
-                    step_label = f'Train Backward: {step.layer.label}'
-                case StepType.TrainOptimize:
-                    step_label = f'Train Optimize: {step.layer.label}'
-            self.draw(label=step_label)
-            yield step
 
 __all__ = ['NetGraph']

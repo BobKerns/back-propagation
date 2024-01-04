@@ -33,15 +33,11 @@ import numpy as np
 from backpropex.types import (
     EvalOutputStepResult,
     EvalStepResultAny,
+    InitStepResult,
+    NetProtocol,
     StepType,
-    EvalForwardStepResult, EvalInputStepResult, LayerType, NPFloats, FloatSeq, NetTuple,
-    TrainForwardStepResult,
-    TrainInputStepResult,
-    TrainLossStepResult,
-    TrainOutputStepResult,
-    TrainStepResultAny,
-    TrainingData,
-    TrainingInfo
+    EvalForwardStepResult, EvalInputStepResult,
+    LayerType, FloatSeq, NetTuple,
 )
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 from backpropex.edge import Edge
@@ -57,33 +53,13 @@ def _ids():
         idx += 1
 
 ids = _ids()
-class Network:
+class Network(NetProtocol):
     """
     A neural network.
     """
     graph: DiGraph = DiGraph()
-    layers: Sequence[Layer]
-    loss_function: LossFunction
-    max_layer_size: int
-    name: str
     input_type: NetTuple
     output_type: NetTuple
-
-    # Progress information for drawing the network
-    # The layer that is currently being evaluated
-    active_layer: Optional[Layer] = None
-    active_message: Optional[str] = None
-    # The item within the training set currently being trained
-    datum_number: Optional[int] = None
-    datum_max: int = 0
-    datum_value: Optional[NPFloats] = None
-    datum_expected: Optional[NPFloats] = None
-    # The epoch currently being trained (pass through the training set))
-    epoch_number: Optional[int] = None
-    # The number of epochs to train
-    epoch_max: int = 0
-    # The loss for the current training item.
-    loss: Optional[float] = None
 
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
@@ -99,6 +75,7 @@ class Network:
         :param loss_function: The loss function for this network.
         :param activation_functions: The activation function for each layer.
         """
+        self.net = self
         if activations is None:
             activations = [ACT_ReLU] * (len(layers) - 1) + [ACT_Sigmoid]
         self.max_layer_size = max(layers)
@@ -179,18 +156,6 @@ class Network:
                 edge = Edge(node, next_node, initial_weight=w[nidx][pidx])
                 self.graph.add_edge(node, next_node, edge=edge) # type: ignore
 
-    @property
-    def labels(self) -> dict[Node, str]:
-        return {n: n.label for n in self.nodes}
-
-    @property
-    def weights(self) -> Generator[float, None, None]:
-        return (edge.weight for edge in self.edges)
-
-    @property
-    def values(self) -> Generator[float, None, None]:
-        return (node.value for node in self.nodes)
-
     @contextmanager
     def step_active(self, layer: Layer, /):
         """
@@ -201,43 +166,6 @@ class Network:
         self.active_layer = None
         self.active_message = None
 
-    @contextmanager
-    def training_epoch(self, epoch: int, epoch_max: int):
-        """
-        Set the active layer for the network during a training pass.
-        """
-        self.epoch_number = epoch
-        self.epoch_max = epoch_max
-        yield epoch
-        self.epoch_number = None
-        self.epoch_max = 0
-
-    @contextmanager
-    def training_datum(self, datum_number: int, datum_max: int,
-             datum_value: NPFloats, datum_expected: NPFloats):
-        """
-        Set the active layer for the network during a training pass.
-        """
-        self.datum_number = datum_number
-        self.datum_max = datum_max
-        self.datum_value = datum_value
-        self.datum_expected = datum_expected
-        yield datum_number, datum_max, datum_value, datum_expected
-        self.datum_number = None
-        self.datum_max = 0
-        self.datum_value = None
-        self.datum_expected = None
-
-    @contextmanager
-    def training_loss(self,  output: NPFloats, expected: NPFloats, /):
-        """
-        Set the loss for the network during a training pass.
-        """
-        loss = self.loss_function(output, expected)
-        self.loss = loss
-        yield loss
-        self.loss = None
-
     def __call__(self, input: FloatSeq, /, *,
                  label: Optional[str] = None
                  ) -> Generator[EvalStepResultAny, Any, None]:
@@ -246,6 +174,7 @@ class Network:
         diagrams of the network as it is evaluated. The final value is the output
         from the network as a named tuple.
         """
+        yield InitStepResult(StepType.Initialized)
         layer = self.layers[0]
         layer.values = input
         with self.step_active(layer):
@@ -262,95 +191,6 @@ class Network:
         yield EvalOutputStepResult(StepType.Output,
                                    layer=self.output_layer,
                                    output=self.output_type(*self.output))
-
-    def train_one(self, input: FloatSeq, expected: FloatSeq, /,
-                  datum_number: int = 0, datum_max: int = 1,
-                  ) -> Generator[TrainStepResultAny, Any, None]:
-        """
-        Train the network for a given input and expected output.
-        """
-        input = np.array(input)
-        expected = np.array(expected)
-        with self.training_datum(datum_number, datum_max, input, expected):
-            training_info: TrainingInfo = TrainingInfo(epoch=self.epoch_number or 0,
-                                         epoch_max=self.epoch_max,
-                                         datum_no=datum_number,
-                                         datum_max=datum_max,
-                                         datum=(input, expected))
-            # Forward pass
-            def map_step(step: EvalStepResultAny):
-                """Extemd the eval step with training info."""
-                match(step):
-                    case EvalInputStepResult():
-                        return TrainInputStepResult(StepType.TrainInput,
-                                                    layer=step.layer,
-                                                    input=step.input,
-                                                    **training_info)
-                    case EvalForwardStepResult():
-                        return TrainForwardStepResult(StepType.TrainForward,
-                                                    layer=step.layer,
-                                                    **training_info)
-                    case EvalOutputStepResult():
-                        return TrainOutputStepResult(StepType.TrainOutput,
-                                                    layer=step.layer,
-                                                    output=step.output,
-                                                    **training_info)
-            yield from (map_step(r) for r in self(input))
-            # Backward pass
-            layer = self.layers[-1]
-            output = self.output_array
-            loss = self.loss_function(output, expected)
-            with self.training_loss(output, expected) as loss:
-                yield TrainLossStepResult(StepType.TrainLoss, layer=layer, loss=loss, **training_info)
-                for layer in reversed(self.layers[0:-1]):
-                    for node in layer.real_nodes:
-                        value = sum(edge.weight * edge.next.value for edge in self.edges)
-                        print(f'TODO: Node {node.idx} value={value:.2f}')
-
-    def backpropagate(self, output: NPFloats, expected: NPFloats, /):
-        """
-        Backpropagate the gradient through the network.
-        """
-        if self.datum_expected is None:
-            raise ValueError('No expected output set')
-        with self.training_loss(output, expected) as loss:
-            grad = self.loss_function.derivative(output, expected)
-            print(f'Loss={loss:.2f}, grad={grad:.2f}')
-            # Backward pass
-            layer = self.layers[-1]
-            for node in layer.real_nodes:
-                node.gradient = node.value - self.datum_expected[node.idx]
-            for layer in reversed(self.layers[0:-1]):
-                for node in layer.real_nodes:
-                    total_weights = sum([
-                        edge.weight * (edge.next.gradient or 0.0)
-                        for edge
-                        in self.in_edges(node)
-                    ], 0.0)
-                    d = node.activation.derivative(node.value)
-                    gradient = (
-                        cast(float, d * edge.weight / total_weights)
-                        for edge
-                        in self.in_edges(node)
-                    )
-                    node.gradient = np.array(gradient)
-
-    def train(self, data: TrainingData, /, *,
-              epochs: int=1000,
-              learning_rate: float=0.1
-              ) -> Generator[TrainStepResultAny, Any, None]:
-        """
-        Train the network for a given set of data.
-        """
-        datum_max = len(data)
-        for epoch in range(epochs):
-            with self.training_epoch(epoch, epochs):
-                for idx, (input, expected) in enumerate(data):
-                    input = np.array(input)
-                    expected = np.array(expected)
-                    with self.training_datum(idx, datum_max, input, expected):
-                        yield from self.train_one(input, expected)
-
     @property
     def edges(self) -> Generator[Edge, None, None]:
         return (
@@ -374,6 +214,17 @@ class Network:
             in self.graph.in_edges(node, data=cast(bool, 'edge'))
             )
 
+    @property
+    def labels(self) -> dict[Node, str]:
+        return {n: n.label for n in self.nodes}
+
+    @property
+    def weights(self) -> Generator[float, None, None]:
+        return (edge.weight for edge in self.edges)
+
+    @property
+    def values(self) -> Generator[float, None, None]:
+        return (node.value for node in self.nodes)
     @property
     def input_layer(self):
         """The input layer of this network."""
@@ -399,9 +250,9 @@ class Network:
         """The output values of this network as an array."""
         return np.array([n.value for n in self.output_layer.real_nodes])
     @property
-    def hidden_layers(self):
+    def hidden_layers(self) -> tuple[Layer, ...]:
         """The hidden layers of this network."""
-        return self.layers[1:-1]
+        return tuple(self.layers[1:-1])
 
     def __getitem__(self, idx: int):
         """Get a layer by index."""

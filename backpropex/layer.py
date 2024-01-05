@@ -37,7 +37,7 @@ class Layer:
         """
         A set of nodes constituting one layer in a neural network.
 
-        Inaddition to the specified number of nodes, a bias node is added to the layer.
+        In addition to the specified number of nodes, a bias node is added to the layer.
 
         :param nodes: The number of nodes in this layer.
         :param activation_function: The activation function for each node in this layer.

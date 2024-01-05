@@ -28,7 +28,7 @@ from backpropex.steps import (
     StepResultAny, EvalStepResultAny, TrainStepResultAny,
 )
 from backpropex.protocols import (
-    EvalProtocol, GraphProtocol, TrainProtocol, NetProtocol,
+    EvalProtocol, Filter, GraphProtocol, TrainProtocol, NetProtocol,
 )
 
 # Constants for drawing the network
@@ -57,19 +57,24 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     xscale: float
     yscale: float
 
+    _filter: Optional[Filter|type[Filter]] = None
+
     @overload
     def __init__(self, net: NetProtocol, /, *,
                  margin: float=0.13,
+                 filter: Optional[Filter|type[Filter]] = None,
                  ) -> None:
         ...
     @overload
     def __init__(self, trainer: TrainProtocol, /, *,
                  margin: float=0.13,
+                 filter: Optional[Filter|type[Filter]] = None,
                  ) -> None:
         ...
 
     def __init__(self, proxy: NetProtocol|TrainProtocol, /, *,
                  margin: float=0.13,
+                 filter: Optional[Filter|type[Filter]] = None,
                  ) -> None:
         """
         Initialize the graph drawer for either  a network or a trainer.
@@ -83,6 +88,8 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         self.margin = margin
         self.xscale = 1.0 / (len(self.net.layers) + 0.4)
         self.yscale = 1.0 / (self.net.max_layer_size + 1)
+
+        _filter = filter
 
     @cached_property
     def positions(self):
@@ -349,29 +356,34 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
 
     @overload
     def __call__(self, input: FloatSeq, /, *,
-                label: Optional[str] = None
+                label: Optional[str] = None,
+                filter: Optional[Filter|type[Filter]] = None,
                 ) -> Generator[EvalStepResultAny, Any, None]:
         ...
     @overload
     def __call__(self, data: TrainingData, /, *,
-                epochs: int=1000,
-                learning_rate: float=0.1
-                ) -> Generator[TrainStepResultAny, Any, None]:
+                 epochs: int=1000,
+                 learning_rate: float=0.1,
+                 filter: Optional[Filter|type[Filter]] = None,
+            ) -> Generator[TrainStepResultAny, Any, None]:
         ...
     def __call__(self, data: FloatSeq|TrainingData, /, *,
-                epochs: int=1000,
-                learning_rate: float=0.1,
-                label: Optional[str] = None
-                ) -> Generator[StepResultAny, Any, None]:
+                 epochs: int=1000,
+                 learning_rate: float=0.1,
+                 label: Optional[str] = None,
+                 filter: Optional[Filter|type[Filter]] = None,
+            ) -> Generator[StepResultAny, Any, None]:
         """
         """
-        if self.trainer is None:
-            yield from self.eval( cast(FloatSeq, data),
-                                 label=label)
-        else:
-            yield from self.train(cast(TrainingData, data),
-                                  epochs=epochs,
-                                  learning_rate=learning_rate)
+        with self.net.filter(filter):
+            with self.net.filter(self._filter):
+                if self.trainer is None:
+                    yield from self.eval( cast(FloatSeq, data),
+                                        label=label)
+                else:
+                    yield from self.train(cast(TrainingData, data),
+                                        epochs=epochs,
+                                        learning_rate=learning_rate)
 
     def eval(self, data: FloatSeq, /, *,
                 label: Optional[str] = None,

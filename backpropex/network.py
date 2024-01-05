@@ -25,26 +25,28 @@
 from contextlib import contextmanager
 
 from networkx import DiGraph
-from typing import Any, Generator, NamedTuple, Optional, Sequence, cast
+from typing import Any, Callable, Generator, NamedTuple, Optional, Sequence, cast
 
 import numpy as np
 from backpropex.builder import DefaultBuilder, sanitize
+from backpropex.filters import FilterChain
 
 from backpropex.steps import (
     EvalOutputStepResult,
     EvalStepResultAny,
     InitStepResult,
+    StepResultAny,
     StepType,
     EvalForwardStepResult, EvalInputStepResult,
 )
 from backpropex.types import (
     FloatSeq, NetTuple,
 )
-from backpropex.protocols import Builder, NetProtocol
+from backpropex.protocols import Builder, NetProtocol, Filter
 from backpropex.edge import Edge
 from backpropex.layer import Layer
 from backpropex.node import Node
-
+from backpropex.filters import FilterChain
 def _ids():
     """Generate unique ids."""
     idx = 0
@@ -53,6 +55,7 @@ def _ids():
         idx += 1
 
 ids = _ids()
+
 class Network(NetProtocol):
     """
     A neural network.
@@ -64,9 +67,12 @@ class Network(NetProtocol):
     max_layer_size: int
     name: str
 
+    _filter: Optional[Filter] = None
+
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
                  builder: Optional[Builder|type[Builder]] = DefaultBuilder,
+                 filter: Optional[Filter|type[Filter]] = None,
                  **kwargs: Any
                  ):
         """
@@ -77,6 +83,11 @@ class Network(NetProtocol):
         :param activation_functions: The activation function for each layer.
         """
         self.net = self
+
+        if isinstance(filter, type):
+            self._filter = filter()
+        else:
+            self._filter = filter
 
         self.name = name if name is not None else f'Network_{next(ids)}'
 
@@ -91,6 +102,32 @@ class Network(NetProtocol):
         self.input_type = self.mk_namedtuple('input', self.input_layer)
         self.output_type = self.mk_namedtuple('output', self.output_layer)
 
+    @contextmanager
+    def filterCheck[R: StepResultAny](
+        self, type: StepType,
+        mk_result: Callable[[], R],
+    /) -> Generator[R|None, Any, None]:
+        """
+        Check if the filter allows the step to proceed.
+        """
+        if self._filter is not None:
+            if self._filter(type, None):
+                result = mk_result()
+                if result.type != type:
+                    raise ValueError(f'Wrong result type: {result.type}')
+                if self._filter(type, result):
+                    yield result
+                else:
+                    yield None
+            else:
+                yield None
+            if self._filter(type, False):
+                raise StopIteration
+        else:
+            result = mk_result()
+            if result.type != type:
+                raise ValueError(f'Wrong result type: {result.type}')
+            yield result
 
     def mk_namedtuple(self, suffix: str, layer: Layer) -> NetTuple:
         fields = [
@@ -110,34 +147,69 @@ class Network(NetProtocol):
         self.active_layer = None
         self.active_message = None
 
+    @contextmanager
+    def filter(self, _filter: Filter|type[Filter]|None, /) -> Generator[Filter |  None, Any, None]:
+        """
+        Emable a filter.
+        """
+        if _filter is None:
+            yield self._filter
+        else:
+            if isinstance(_filter, type):
+                _ifilter = _filter()
+            else:
+                _ifilter = _filter
+            prev = self._filter
+            if prev is not None:
+                _ifilter = FilterChain(prev, _ifilter)
+            self._filter = _ifilter
+            yield _ifilter
+            self._filter = prev
+
     def __call__(self, input: FloatSeq, /, *,
-                 label: Optional[str] = None
+                 label: Optional[str] = None,
+                 filter: Optional[Filter|type[Filter]] = None,
                  ) -> Generator[EvalStepResultAny, Any, None]:
         """
         Evaluate the network for a given input. Returns a generator that produces
         diagrams of the network as it is evaluated. The final value is the output
         from the network as a named tuple.
         """
-        yield InitStepResult(StepType.Initialized)
-        layer = self.layers[0]
-        layer.values = input
-        with self.step_active(layer):
-            in_tuple = self.input_type(*input)
-            yield EvalInputStepResult(StepType.Input, layer=layer, input=in_tuple)
-        for layer in self.layers[1:]:
-            with self.step_active(layer):
-                for node in layer.real_nodes:
-                    value = sum(edge.weight * edge.previous.value for edge in self.in_edges(node))
-                    node.value = node.activation(value)
-                yield EvalForwardStepResult(StepType.Forward,
-                                            layer=layer,
-                                            values=layer.values,
-                                            )
-        # Yeld the result back to the caller.
-        # We need a better protocol for this.
-        yield EvalOutputStepResult(StepType.Output,
-                                   layer=self.output_layer,
-                                   output=self.output_type(*self.output))
+        with self.filter(filter):
+            with self.filter(self._filter):
+                with self.filterCheck(StepType.Initialized,
+                                lambda : InitStepResult(StepType.Initialized)) as step:
+                    if step:
+                        yield step
+                layer = self.layers[0]
+                layer.values = input
+                with self.step_active(layer):
+                    in_tuple = self.input_type(*input)
+                    with self.filterCheck(StepType.Input,
+                                    lambda : EvalInputStepResult(StepType.Input, layer=layer, input=in_tuple)) as step:
+                        if step:
+                            yield step
+                for layer in self.layers[1:]:
+                    with self.step_active(layer):
+                        for node in layer.real_nodes:
+                            value = sum(
+                                (edge.weight * edge.previous.value
+                                        for edge in self.in_edges(node)))
+                            node.value = node.activation(value)
+                        with self.filterCheck(StepType.Forward,
+                                        lambda : EvalForwardStepResult(StepType.Forward,
+                                                                    layer=layer,
+                                                                    values=layer.values)) as step:
+                            if step:
+                                yield step
+                # Yeld the result back to the caller.
+                def mk_output():
+                    return EvalOutputStepResult(StepType.Output,
+                                                layer=self.output_layer,
+                                                output=self.output_type(*self.output))
+                with self.filterCheck(StepType.Output, mk_output) as step:
+                    if step:
+                        yield step
     @property
     def edges(self) -> Generator[Edge, None, None]:
         return (
@@ -162,16 +234,20 @@ class Network(NetProtocol):
             )
 
     @property
-    def labels(self) -> dict[Node, str]:
-        return {n: n.label for n in self.nodes}
-
-    @property
     def weights(self) -> Generator[float, None, None]:
         return (edge.weight for edge in self.edges)
 
     @property
     def values(self) -> Generator[float, None, None]:
         return (node.value for node in self.nodes)
+
+    @property
+    def labels(self) -> dict[Node, str]:
+        return {
+            n:n.label
+            for n in self.real_nodes
+        }
+
     @property
     def input_layer(self):
         """The input layer of this network."""

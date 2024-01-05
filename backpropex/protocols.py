@@ -2,7 +2,8 @@
 Protocols to allow the various classes to collaborate.
 """
 
-from typing import Sequence, Optional, overload, runtime_checkable, Protocol, TYPE_CHECKING, Any, Generator
+from contextlib import contextmanager
+from typing import Callable, Literal, Sequence, Optional, overload, runtime_checkable, Protocol, TYPE_CHECKING, Any, Generator
 from networkx import DiGraph
 
 from backpropex.types import (
@@ -11,14 +12,17 @@ from backpropex.types import (
 from backpropex.steps import (
     EvalStepResultAny,
     InitStepResult,
+    StepResult,
+    StepResultAny,
+    StepType,
     TrainStepResultAny
 )
 
 if TYPE_CHECKING:
     from backpropex.layer import Layer
     from backpropex.edge import Edge
-    from backpropex.node import Node
     from backpropex.loss import LossFunction
+    from backpropex.node import Node
 
 
 @runtime_checkable
@@ -49,6 +53,18 @@ class NetProtocol(EvalProtocol, Protocol):
     # The layer that is currently being evaluated
     active_layer: Optional['Layer'] = None
     active_message: Optional[str] = None
+
+
+    @contextmanager
+    def filter(self, _filter: 'Filter|type[Filter]|None', /) -> Generator['Filter|None', Any, None]:
+        ...
+
+    @contextmanager
+    def filterCheck[R: StepResultAny](
+        self, type: StepType,
+        mk_step: Callable[[], R],
+        /,) -> Generator[R|None, Any, None]:
+        ...
 
     @property
     def labels(self) -> dict['Node', str]:
@@ -177,8 +193,55 @@ class Builder(Protocol):
     def __call__(self, net: NetProtocol, *args: Any, **kwargs: Any) -> None:
         ...
 
+
+@runtime_checkable
+class Filter(Protocol):
+    """
+    A filter for backpropex.
+    """
+    @overload
+    def __call__(self, step: StepType, result: None) -> bool:
+        """
+        Prefilter a step result. If False is returned, no StepResult
+        will be emitted, and no Graph will be produced.
+        """
+        ...
+    @overload
+    def __call__[T: StepType](self, step: T, result: StepResult[T]) -> bool:
+        """
+        Filter a step result.
+
+        If False is returned, no further processing on this step will be done.
+
+        :param step: The step type.
+        :param result: The step result.
+        :return: True if the result is accepted, False otherwise.
+        """
+        ...
+    @overload
+    def __call__(self, step: StepType, result: Literal[False]) -> bool:
+        """
+        Postfilter a step result.
+
+        :param step: The step type.
+        :param result: The step result.
+        :return: False if the processing should be stopped, True otherwise.
+        """
+        ...
+
+    def __call__(self, step: StepType, result: Any) -> bool:
+        """
+        Filter a step result.
+
+        :param step: The step type.
+        :param result: The step result.
+        :return: True if the result is accepted, False otherwise.
+        """
+        ...
+
+
 __all__ = [
     'EvalProtocol', 'NetProtocol', 'TrainProtocol', 'GraphProtocol',
     'LossFunction', 'ActivationFunction',
-    'Builder'
+    'Builder', 'Filter'
 ]

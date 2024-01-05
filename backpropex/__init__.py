@@ -10,3 +10,4 @@ from .network import *
 from .builder import *
 from .netgraph import *
 from .trainer import *
+from .filters import *

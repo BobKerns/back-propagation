@@ -29,7 +29,7 @@ class StepType(StrEnum):
     TrainOptimize = "Optimize"
 
 # Step types for ordinary evaluation
-type EvalStepType = Literal[StepType.Input, StepType.Forward, StepType.Output]
+type EvalStepType = Literal[StepType.Input, StepType.Forward, StepType.Output, StepType.Initialized]
 
 # Step types for training
 type TrainStepType = Literal[
@@ -38,7 +38,8 @@ type TrainStepType = Literal[
     StepType.TrainOutput,
     StepType.TrainLoss,
     StepType.TrainBackward,
-    StepType.TrainOptimize
+    StepType.TrainOptimize,
+    StepType.Initialized
 ]
 
 type LayerStepType = EvalStepType|TrainStepType

@@ -13,16 +13,16 @@ import numpy as np
 from backpropex.loss import LossFunction, MeanSquaredError
 from backpropex.steps import (
     StepType, InitStepResult,
-    EvalForwardStepResult, EvalInputStepResult, EvalOutputStepResult,
+    EvalForwardStepResult, EvalInputStepResult, EvalOutputStepResult, StepTypeAny,
     TrainForwardStepResult, TrainInputStepResult,
     TrainLossStepResult, TrainOutputStepResult,
-    EvalStepResultAny, TrainStepResultAny,
+    EvalStepResultAny, TrainStepResultAny, TrainStepType,
 )
 from backpropex.types import (
     FloatSeq, NPFloats,
     TrainingData, TrainingInfo,
 )
-from backpropex.protocols import NetProtocol, TrainProtocol
+from backpropex.protocols import Filter, NetProtocol, TrainProtocol
 
 class Trainer(TrainProtocol):
     """
@@ -43,15 +43,20 @@ class Trainer(TrainProtocol):
     # The loss for the current training item.
     loss: Optional[float] = None
 
+    _filter: Optional[Filter|type[Filter]] = None
+
     def __init__(self, network: NetProtocol, /, *,
-                 loss_function: LossFunction = MeanSquaredError
+                 loss_function: LossFunction = MeanSquaredError,
+                 filter: Optional[Filter|type[Filter]] = None,
                  ):
         self.net = network
         self.loss_function = loss_function
 
     def __call__(self, data: TrainingData, /, *,
                     epochs: int=1, batch_size: int=1,
-                    learning_rate: float=0.1) -> Generator[TrainStepResultAny, Any, None]:
+                    learning_rate: float=0.1,
+                    filter: Optional[Filter|type[Filter]] = None,
+                    ) -> Generator[TrainStepResultAny, Any, None]:
         """
         Train the network on the given training data.
 
@@ -64,16 +69,18 @@ class Trainer(TrainProtocol):
         The training data is processed in batches. The batch size is the number
         of training data tuples that are processed before the weights are updated.
         """
-        datum_max = len(data)
-        for epoch in range(epochs):
-            with self.training_epoch(epoch, epochs):
-                for idx, (input, expected) in enumerate(data):
-                    input = np.array(input)
-                    expected = np.array(expected)
-                    with self.training_datum(idx, datum_max, input, expected):
-                        yield from self.train_one(input, expected,
-                                                  datum_number=idx,
-                                                  datum_max=datum_max)
+        with self.net.filter(filter):
+            with self.net.filter(self._filter):
+                datum_max = len(data)
+                for epoch in range(epochs):
+                    with self.training_epoch(epoch, epochs):
+                        for idx, (input, expected) in enumerate(data):
+                            input = np.array(input)
+                            expected = np.array(expected)
+                            with self.training_datum(idx, datum_max, input, expected):
+                                yield from self.train_one(input, expected,
+                                                        datum_number=idx,
+                                                        datum_max=datum_max)
 
 
     @contextmanager
@@ -148,7 +155,24 @@ class Trainer(TrainProtocol):
                                                     **training_info)
                     case InitStepResult():
                         return step
-            yield from (map_step(r) for r in self.net(input))
+            def map_step_type(type: StepTypeAny) -> TrainStepType:
+                """Map the step type."""
+                match(type):
+                    case StepType.Input:
+                        return StepType.TrainInput
+                    case StepType.Forward:
+                        return StepType.TrainForward
+                    case StepType.Output:
+                        return StepType.TrainOutput
+                    case StepType.Initialized:
+                        return StepType.Initialized
+                    case _:
+                        raise ValueError(f'Unexpected step type {type}')
+            def checkStep(step: EvalStepResultAny) -> TrainStepResultAny|None:
+                """Check the step type."""
+                with self.net.filterCheck(map_step_type(step.type), lambda: map_step(step)) as f:
+                    return f
+            yield from (s for s in (checkStep(r) for r in self.net(input)) if s is not None)
             # Backward pass
             layer = self.net.layers[-1]
             output = self.net.output_array

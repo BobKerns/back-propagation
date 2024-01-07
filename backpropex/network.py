@@ -223,20 +223,23 @@ class Network(NetProtocol):
                                     for edge in node.edges_to
                                     ))
                             node.value = node.activation(value)
-                        with self.filterCheck(StepType.Forward,
-                                        lambda : EvalForwardStepResult(StepType.Forward,
-                                                                    layer=layer,
-                                                                    values=tuple(layer.values))) as step:
+                        def mk_forward():
+                            return EvalForwardStepResult(StepType.Forward,
+                                                        layer=layer,
+                                                        values=tuple(node.value for node in layer.real_nodes))
+                        def mk_output():
+                            return EvalOutputStepResult(StepType.Output,
+                                                        layer=self.output_layer,
+                                                        output=self.output_type(*self.output))
+                        def mk_step[R: StepResultAny]() :
+                            match(layer.layer_type):
+                                case LayerType.Output:
+                                    return StepType.Output, mk_output
+                                case _:
+                                    return StepType.Forward, mk_forward
+                        with self.filterCheck(*mk_step()) as step:
                             if step:
                                 yield step
-                # Yeld the result back to the caller.
-                def mk_output():
-                    return EvalOutputStepResult(StepType.Output,
-                                                layer=self.output_layer,
-                                                output=self.output_type(*self.output))
-                with self.filterCheck(StepType.Output, mk_output) as step:
-                    if step:
-                        yield step
 
     # For use by the builder
     class Context(BuilderContext):

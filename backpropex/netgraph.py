@@ -97,6 +97,8 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
 
         self._filter = filter
 
+        coolwarms: Sequence[Colormap] = colormaps.get_cmap('coolwarm'),
+        self.coolwarm = coolwarms[0]
     @cached_property
     def positions(self):
         """Compute the positions of the nodes in the graph."""
@@ -115,9 +117,6 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     def edge_colors(self) -> list[float]:
         return [w for w in self.net.weights]
 
-    coolwarms: Sequence[Colormap] = colormaps.get_cmap('coolwarm'),
-    coolwarm = coolwarms[0]
-
     def draw(self, result: StepResultAny, /, *, label: str="Initial State"):
         """
         Draw the network using matplotlib.
@@ -125,13 +124,23 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         plt.close()
         fig, ax = plt.subplots(figsize=(15, 10)) # type: ignore
         ax.set_autoscale_on(False)
-        minval = min(*self.net.values, 0)
-        maxval = max(*self.net.values, 1)
-        minweight = min(*self.net.weights, -0.1)
-        maxweight = max(*self.net.weights, 0.1)
+        minval = min(*self.net.values, 0.1)
+        maxval = max(*self.net.values, 1.1)
+        minweight = min(*self.net.weights, -0.1, 0.1)
+        maxweight = max(*self.net.weights, 0.1, 0.1)
+        norm = Normalize(vmin=minval, vmax=maxval)
+        wnorm = Normalize(vmin=minweight, vmax=maxweight)
+        mappable = ScalarMappable(
+                         cmap=self.coolwarm,
+                         norm=norm,
+                     )
+        wmappable = ScalarMappable(
+                         cmap=self.coolwarm,
+                         norm=wnorm,
+                     )
         ax.set_title(label)
-        self._draw_nodes(ax, minval, maxval)
-        self._draw_edges(ax, minweight, maxweight)
+        self._draw_nodes(ax, mappable)
+        self._draw_edges(ax, wmappable)
         # Label the layers on the graph
         if self.net.active_layer is not None:
             self._draw_active(ax)
@@ -149,23 +158,18 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                      norm=norm,
                      extend='both',
                      label='Node value',
-                     mappable=ScalarMappable(
-                         cmap=self.coolwarm,
-                         norm=norm,
-                     ))
-        wnorm = Normalize(vmin=minweight, vmax=maxweight)
+                     mappable=mappable,
+                     )
         fig.colorbar(drawedges=False, # type: ignore
                      cax=cax2,
                      norm=wnorm,
                      extend='both',
                      label='Edge weight',
-                     mappable=ScalarMappable(
-                         cmap=self.coolwarm,
-                         norm=wnorm,
-                     ))
+                     mappable=wmappable,
+                     )
         plt.show() # type: ignore
 
-    def _draw_nodes(self, ax: Axes, minval: float, maxval: float):
+    def _draw_nodes(self, ax: Axes, mappable: ScalarMappable):
         """
         Draw the nodes of the network.
         """
@@ -174,16 +178,19 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                        edgecolors: str|float|int ='black',
                        font_color: str|float|int ='black',
                        **kwargs: Any):
-            draw_networkx_nodes(self.net.graph, self.positions,
-                                nodelist=nodelist,
-                                node_size=node_size,
-                                node_color=cast(str, [n.value for n in nodelist]),
-                                vmin=minval, vmax=maxval,
-                                cmap=self.coolwarm,
-                                edgecolors=edgecolors,
-                                alpha=0.4,
-                                ax=ax,
-                                **kwargs)
+            node_colors = [
+                cast(tuple[float, float, float, float], mappable.to_rgba(value, alpha=0.4)) # type: ignore
+                for value in (n.value for n in nodelist)
+                ]
+            draw_networkx_nodes(
+                self.graph, self.positions,
+                    nodelist=nodelist,
+                    node_size=node_size,
+                    node_color=node_colors, # type: ignore
+                    edgecolors=edgecolors,
+                    ax=ax,
+                    **kwargs
+                )
             for node in nodelist:
                 pos_x, pos_y = self.positions[node]
                 pos = pos_x, pos_y - 0.001
@@ -210,7 +217,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                    edgecolors='green',
                    font_color='green')
 
-    def _draw_edge_labels(self, ax: Axes, minweight: float, maxweight: float):
+    def _draw_edge_labels(self, ax: Axes, mappable: ScalarMappable):
         """Label the edges of the network."""
         # Label the edges. We'll need to look up node positions.
         positions = self.positions
@@ -218,11 +225,10 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         shifts = (0.065, 0.080, 0.055, 0.075)
         # We group the edges per incomeing node so we can shift the labels
         # to avoid collisions.
-        norm = Normalize(vmin=minweight, vmax=maxweight)
         for node in self.net.nodes:
-            for idx, edge in enumerate(self.net.in_edges(node)):
-                loc1 = positions[edge.previous]
-                loc2 = positions[edge.next]
+            for idx, edge in enumerate(node.edges_to):
+                loc1 = positions[edge.from_]
+                loc2 = positions[edge.to_]
                 loc1_x, loc1_y = loc1
                 loc2_x, loc2_y = loc2
                 edge_len =  plen(loc1, loc2)
@@ -236,7 +242,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                 weight = edge.weight
                 # Darken the labels a bit for readability.  Any more than this
                 # makes the mid-tones too gray.
-                color = self.coolwarm(norm(weight))
+                color = mappable.to_rgba(weight) # type: ignore
                 hsv: tuple[float, float, float] = rgb_to_hsv(*color[0:3])
                 hsv = (*hsv[0:2], hsv[2] * 0.9)
                 label_color = [*hsv_to_rgb(*hsv), color[3]]
@@ -246,18 +252,20 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                             verticalalignment='center',
                             )
 
-    def _draw_edges(self, ax: Axes, minweight: float, maxweight: float):
+    def _draw_edges(self, ax: Axes, mappable: ScalarMappable):
         """
         Draw the edges of the network and their labels.
         """
-        edge_colors:Any = self.edge_colors
-        draw_networkx_edges(self.net.graph, self.positions,
+        edge_color_values:Any = self.edge_colors
+        edge_colors = [
+            tuple[float](mappable.to_rgba(w)) # type: ignore
+            for w in edge_color_values
+        ]
+        draw_networkx_edges(self.graph, self.positions,
                             node_size=1000,
-                            edge_color=edge_colors,
-                            edge_cmap=self.coolwarm,
-                            edge_vmin=minweight, edge_vmax=maxweight,
+                            edge_color=edge_colors, # type: ignore
                             ax=ax)
-        self._draw_edge_labels(ax, minweight, maxweight)
+        self._draw_edge_labels(ax, mappable)
 
     def _draw_layer_labels(self, ax: Axes):
         """

@@ -22,14 +22,15 @@
     other examples you may have seen.
 """
 
+from typing import Any, Callable, Generator, NamedTuple, Optional
+from collections.abc import Iterable
 from contextlib import contextmanager
 
-from networkx import DiGraph
-from typing import Any, Callable, Generator, NamedTuple, Optional, Sequence, cast
-
 import numpy as np
+
 from backpropex.builder import DefaultBuilder, sanitize
 from backpropex.filters import FilterChain
+from backpropex.randomizer import HeEtAl
 
 from backpropex.steps import (
     EvalOutputStepResult,
@@ -40,13 +41,14 @@ from backpropex.steps import (
     EvalForwardStepResult, EvalInputStepResult,
 )
 from backpropex.types import (
-    FloatSeq, NetTuple,
+    FloatSeq, LayerType, NetTuple,
 )
-from backpropex.protocols import Builder, NetProtocol, Filter
+from backpropex.protocols import Builder, BuilderContext, NetProtocol, Filter, Randomizer
 from backpropex.edge import Edge
 from backpropex.layer import Layer
 from backpropex.node import Node
 from backpropex.filters import FilterChain
+
 def _ids():
     """Generate unique ids."""
     idx = 0
@@ -96,9 +98,9 @@ class Network(NetProtocol):
         context = self.Context(self)
 
         if isinstance(builder, type):
-            builder()(self, *layers, **kwargs)
+            builder()(context, *layers, **kwargs)
         elif isinstance(builder, Builder):
-            builder(self, *layers, **kwargs)
+            builder(context, *layers, **kwargs)
         else:
             raise TypeError(f'Invalid builder type: {builder}')
 
@@ -216,13 +218,15 @@ class Network(NetProtocol):
                     with self.step_active(layer):
                         for node in layer.real_nodes:
                             value = sum(
-                                (edge.weight * edge.previous.value
-                                        for edge in self.in_edges(node)))
+                                (
+                                    edge.weight * edge.from_.value
+                                    for edge in node.edges_to
+                                    ))
                             node.value = node.activation(value)
                         with self.filterCheck(StepType.Forward,
                                         lambda : EvalForwardStepResult(StepType.Forward,
                                                                     layer=layer,
-                                                                    values=layer.values)) as step:
+                                                                    values=tuple(layer.values))) as step:
                             if step:
                                 yield step
                 # Yeld the result back to the caller.
@@ -233,28 +237,89 @@ class Network(NetProtocol):
                 with self.filterCheck(StepType.Output, mk_output) as step:
                     if step:
                         yield step
+
+    # For use by the builder
+    class Context(BuilderContext):
+        """
+        The context for the builder.
+        """
+        net: NetProtocol
+        def __init__(self, network: 'Network', /):
+            self.net = network
+        def add_layer(self, layer: Layer, /):
+            """
+            Add a layer to the network.
+            """
+            self.net.layers.append(layer)
+
+        def add_layers(self, layers: Iterable[Layer], /):
+            """
+            Add layers to the network.
+            """
+            for layer in layers:
+                self.add_layer(layer)
+
+        @property
+        def layers(self) -> list[Layer]:
+            return self.net.layers
+
+        @property
+        def nodes(self) -> Generator[Node, None, None]:
+            """
+            The nodes in the network.
+            """
+            return self.net.nodes
+
+
+        @property
+        def real_nodes(self) -> Generator[Node, None, None]:
+            """
+            The nodes in the network, excluding bias nodes.
+            """
+            return self.net.real_nodes
+
+        @property
+        def edges(self) -> Generator[Edge, None, None]:
+            """
+            The edges in the network.
+            """
+            return self.net.edges
+
+        def add_edge(self, edge: Edge, /):
+            """
+            Add an edge to the network.
+            """
+            from_ = edge.from_
+            to_ = edge.to_
+            from_.addFrom(edge)
+            to_.addTo(edge)    # type: ignore
+        def add_edges(self, edges: Iterable[Edge], /):
+            """
+            Add edges to the network.
+            """
+            for edge in edges:
+                self.add_edge(edge) # type: ignore
+
     @property
     def edges(self) -> Generator[Edge, None, None]:
         return (
-            cast(Edge, edge)
-            for (f, t, edge) # type: ignore
-            in self.graph.edges(data=cast(bool, 'edge'))
+            edge
+            for layer in self.net.layers
+            for node in layer.nodes
+            for edge in node.edges
             )
 
     @property
     def nodes(self) -> Generator[Node, None, None]:
-        return (cast(Node, node) for node in self.graph.nodes) # type: ignore
+        return (
+            node
+            for layer in self.net.layers
+            for node in layer.nodes
+            )
 
     @property
     def real_nodes(self) -> Generator[Node, None, None]:
         return (node for node in self.nodes if not node.is_bias)
-
-    def in_edges(self, node: Node) -> Generator[Edge, None, None]:
-        return (
-            cast(Edge, edge)
-            for (f, t, edge) # type: ignore
-            in self.graph.in_edges(node, data=cast(bool, 'edge'))
-            )
 
     @property
     def weights(self) -> Generator[float, None, None]:

@@ -15,14 +15,14 @@ Nodes are differentiated by layer type:
   and are displayed differently.
 """
 
-
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Generator, Optional, TYPE_CHECKING
 import math
 
 from backpropex.types import NPFloats
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid, ActivationFunction
 if TYPE_CHECKING:
     from backpropex.layer import Layer
+    from backpropex.edge import Edge
 
 
 class Node:
@@ -42,6 +42,19 @@ class Node:
 
     gradient: Optional[NPFloats] = None
 
+    _edges_from: dict['Node', 'Edge']
+    _edges_to: dict['Node', 'Edge']
+
+    def addFrom(self, edge: 'Edge'):
+        if self._edges_from.get(edge.to_, None) is not None:
+            raise ValueError(f'Edge {edge} already exists from {self} to {edge.to_}')
+        self._edges_from[edge.to_] = edge
+
+    def addTo(self, edge: 'Edge'):
+        if self._edges_to.get(edge.from_, None) is not None:
+            raise ValueError(f'Edge {edge} already exists from {edge.from_} to {self}')
+        self._edges_to[edge.from_] = edge
+
     @property
     def is_bias(self) -> bool:
         """Is this node a bias node?"""
@@ -55,6 +68,8 @@ class Node:
         self.idx = math.floor(idx if idx >= 0 else position[1])
         self.layer = layer
         self.name = name if name is not None else f'{layer.position}_{self.idx}'
+        self._edges_from = dict()
+        self._edges_to = dict()
 
     @property
     def label(self) -> str:
@@ -70,6 +85,22 @@ class Node:
     def value(self, value: float):
         """The value of this node."""
         self._value = float(value)
+
+    @property
+    def edges(self) -> Generator['Edge', None, None]:
+        """The edges connected to this node."""
+        yield from self.edges_from
+        yield from self.edges_to
+
+    @property
+    def edges_from(self) -> Generator['Edge', None, None]:
+        """The edges from this node."""
+        yield from self._edges_from.values()
+
+    @property
+    def edges_to(self) -> Generator['Edge', None, None]:
+        """The edges to this node."""
+        yield from self._edges_to.values()
 
 class Input(Node):
     """

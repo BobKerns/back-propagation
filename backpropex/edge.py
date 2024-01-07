@@ -15,12 +15,12 @@ class Edge:
     """
     # The weight of this edge.
     weight: float
-    previous: Node
-    next: Node
-    def __init__(self, previous: Node, next: Node, /, *,
+    from_: Node
+    to_: Node
+    def __init__(self, from_: Node, to_: Node, /, *,
                  initial_weight: float=0.0):
-        self.previous = previous
-        self.next = next
+        self.from_ = from_
+        self.to_ = to_
         self.weight = initial_weight
 
     @property
@@ -28,6 +28,6 @@ class Edge:
         return f'{self.weight:.2f}'
 
     def __repr__(self):
-        return f'Edge({self.previous} -> {self.next})'
+        return f'Edge({self.from_} -> {self.to_})'
 
 __all__ = ['Edge']

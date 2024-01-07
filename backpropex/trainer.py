@@ -181,7 +181,7 @@ class Trainer(TrainProtocol):
                 yield TrainLossStepResult(StepType.TrainLoss, layer=layer, loss=loss, **training_info)
                 for layer in reversed(self.net.layers[0:-1]):
                     for node in layer.real_nodes:
-                        value = sum(edge.weight * edge.next.value for edge in self.net.edges)
+                        value = sum(edge.weight * edge.to_.value for edge in self.net.edges)
                         print(f'TODO: Node {node.idx} value={value:.2f}')
 
     def backpropagate(self, output: NPFloats, expected: NPFloats, /):
@@ -199,16 +199,15 @@ class Trainer(TrainProtocol):
                 node.gradient = node.value - self.datum_expected[node.idx]
             for layer in reversed(self.net.layers[0:-1]):
                 for node in layer.real_nodes:
-                    total_weights = sum([
-                        edge.weight * (edge.next.gradient or 0.0)
-                        for edge
-                        in self.net.in_edges(node)
-                    ], 0.0)
+                    total_weights = sum((
+                        edge.weight * (edge.to_.gradient or 0.0)
+                        for edge in node.edges_to
+                    ), 0.0)
                     d = node.activation.derivative(node.value)
                     gradient = (
                         cast(float, d * edge.weight / total_weights)
                         for edge
-                        in self.net.in_edges(node)
+                        in node.edges_to
                     )
                     node.gradient = np.array(gradient)
                     print(f'TODO: Node {node.idx} gradient={node.gradient}')

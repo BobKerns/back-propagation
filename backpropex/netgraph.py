@@ -94,11 +94,18 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
 
         self.graph = DiGraph()
 
-
         self._filter = filter
 
         coolwarms: Sequence[Colormap] = colormaps.get_cmap('coolwarm'),
         self.coolwarm = coolwarms[0]
+
+        for layer in self.net.layers:
+            for node in layer.nodes:
+                self.graph.add_node(node) # type: ignore
+                for edge in node.edges_to:
+                    prev, next = edge.from_, edge.to_
+                    self.graph.add_edge(prev, next, edge=edge) # type: ignore
+
     @cached_property
     def positions(self):
         """Compute the positions of the nodes in the graph."""
@@ -150,7 +157,6 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
             tresult = cast(TrainStepResultAny, result)
             self._draw_expected(ax, tresult)
             self._draw_epoch(ax, tresult)
-        norm = Normalize(vmin=minval, vmax=maxval)
         cax1 = fig.add_axes((0.905, 0.50, 0.007, 0.38)) # type: ignore
         cax2 = fig.add_axes((0.905, 0.11, 0.006, 0.38)) # type: ignore
         fig.colorbar(drawedges=False, # type: ignore

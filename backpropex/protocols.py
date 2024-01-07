@@ -2,12 +2,12 @@
 Protocols to allow the various classes to collaborate.
 """
 
+from collections.abc import Iterable
 from contextlib import contextmanager
-from typing import Callable, Literal, Sequence, Optional, overload, runtime_checkable, Protocol, TYPE_CHECKING, Any, Generator
-from networkx import DiGraph
+from typing import Callable, Literal, Optional, overload, runtime_checkable, Protocol, TYPE_CHECKING, Any, Generator
 
 from backpropex.types import (
-    FloatSeq, NPFloats, TrainingData,
+    FloatSeq, NPFloat2D, NPFloats, TrainingData,
 )
 from backpropex.steps import (
     EvalStepResultAny,
@@ -53,7 +53,6 @@ class NetProtocol(EvalProtocol, Protocol):
     active_layer: Optional['Layer'] = None
     active_message: Optional[str] = None
 
-
     @contextmanager
     def filter(self, _filter: 'Filter|type[Filter]|None', /) -> Generator['Filter|None', Any, None]:
         ...
@@ -87,9 +86,6 @@ class NetProtocol(EvalProtocol, Protocol):
 
     @property
     def real_nodes(self) -> Generator['Node', None, None]:
-        ...
-
-    def in_edges(self, node: 'Node') -> Generator['Edge', None, None]:
         ...
 
     @property
@@ -193,13 +189,74 @@ class Randomizer(Protocol):
         """Return a random matrix of the given shape."""
         ...
 
+@runtime_checkable
+class BuilderContext(Protocol):
+        """
+        The context for the builder.
+
+        Nodes are added to the network by adding them to a layer.
+        """
+        net: NetProtocol
+        def __init__(self, network: NetProtocol, /):
+            self.net = network
+
+        def add_layer(self, layer: 'Layer', /):
+            """
+            Add a layer to the network.
+            """
+            ...
+
+        def add_layers(self, layers: Iterable['Layer'], /):
+            """
+            Add layers to the network.
+            """
+            ...
+
+        def add_edge(self, edge: 'Edge', /):
+            """
+            Add an edge to the network.
+            """
+            ...
+        def add_edges(self, edges: Iterable['Edge'], /):
+            """
+            Add edges to the network.
+            """
+            ...
+
+        @property
+        def layers(self) -> list['Layer']:
+            """
+            The layers of the network.
+            """
+            ...
+
+        @property
+        def nodes(self) -> Generator['Node', None, None]:
+            """
+            The nodes in the network.
+            """
+            ...
+
+        @property
+        def real_nodes(self) -> Generator['Node', None, None]:
+            """
+            The nodes in the network, excluding bias nodes.
+            """
+            ...
+
+        @property
+        def edges(self) -> Generator['Edge', None, None]:
+            """
+            The edges in the network.
+            """
+            ...
 
 @runtime_checkable
 class Builder(Protocol):
     """
     The protocol for a builder.
     """
-    def __call__(self, net: NetProtocol, *args: Any, **kwargs: Any) -> None:
+    def __call__(self, net: BuilderContext, *args: Any, **kwargs: Any) -> None:
         ...
 
 
@@ -250,7 +307,8 @@ class Filter(Protocol):
 
 
 __all__ = [
-    'EvalProtocol', 'NetProtocol', 'TrainProtocol', 'GraphProtocol',
+    'EvalProtocol', 'NetProtocol', 'BuilderContext',
+    'TrainProtocol', 'GraphProtocol',
     'LossFunction', 'ActivationFunction',
     'Randomizer', 'Builder', 'Filter'
 ]

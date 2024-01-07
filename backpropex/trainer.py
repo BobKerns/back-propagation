@@ -6,7 +6,7 @@ data set to train the network.
 """
 
 from contextlib import contextmanager
-from typing import Any, Generator, Optional, cast
+from random import shuffle
 
 import numpy as np
 
@@ -79,12 +79,14 @@ class Trainer(TrainProtocol):
         The training data is processed in batches. The batch size is the number
         of training data tuples that are processed before the weights are updated.
         """
+        data = [*data]
         with self.net.trace(trace):
             with self.net.filter(filter):
                 with self.net.filter(self._filter):
                     datum_max = len(data)
                     for epoch in range(epochs):
                         with self.training_epoch(epoch, epochs):
+                            shuffle(data)
                             for idx, (input, expected) in enumerate(data):
                                 input = np.array(input)
                                 expected = np.array(expected)

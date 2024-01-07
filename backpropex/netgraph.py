@@ -24,6 +24,7 @@ from backpropex.types import (
     FloatSeq, TrainingData
 )
 from backpropex.steps import (
+    StepResult,
     StepType,
     InitStepResult, TrainLossStepResult, TrainStepResult,
     StepResultAny, EvalStepResultAny, TrainStepResultAny,
@@ -149,17 +150,19 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                          norm=wnorm,
                      )
         ax.set_title(label)
-        self._draw_nodes(ax, mappable)
-        self._draw_edges(ax, wmappable)
         # Label the layers on the graph
         if self.net.active_layer is not None:
             self._draw_active(ax)
-
-        self._draw_layer_labels(ax)
         if isinstance(result, TrainStepResult):
             tresult = cast(TrainStepResultAny, result)
             self._draw_expected(ax, tresult)
             self._draw_epoch(ax, tresult)
+        self._draw_step(ax, result)
+
+        self._draw_nodes(ax, mappable)
+        self._draw_edges(ax, wmappable)
+
+        self._draw_layer_labels(ax)
         cax1 = fig.add_axes((0.905, 0.50, 0.007, 0.38)) # type: ignore
         cax2 = fig.add_axes((0.905, 0.11, 0.006, 0.38)) # type: ignore
         fig.colorbar(drawedges=False, # type: ignore
@@ -300,30 +303,30 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                         verticalalignment='center',
                         )
 
+    def draw_highlight(self, ax: Axes, expcol: float):
+        if self.net.active_message is not None:
+            ax.annotate(self.active_message, (expcol, layer_y0_offset), # type: ignore
+                        color='red',
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                        )
+        highlight_pos = (
+            expcol - layer_x_offset / 2 - 0.025,
+            layer_y2_offset - 0.02
+        )
+        fancy = FancyBboxPatch(highlight_pos, 0.13, 0.98,
+                                boxstyle='square,pad=0.001',
+                                fc=(0.9, 1.0, 0.92), ec=(0.3, 1.0, 0.3),
+                                )
+        ax.add_patch(fancy)
+
     def _draw_active(self, ax: Axes):
          """
          Highlight the active layer, if there is one.
          """
          if self.net.active_layer is not None:
-            if self.net.active_message is not None:
-                active_msg_pos = (
-                        self.net.active_layer.position * self.xscale + layer_x_offset,
-                        layer_y0_offset
-                )
-                ax.annotate(self.active_message, active_msg_pos, # type: ignore
-                            color='red',
-                            horizontalalignment='center',
-                            verticalalignment='center',
-                            )
-            highlight_pos = (
-                    self.net.active_layer.position * self.xscale + 0.145 * layer_x_offset / 2,
-                    layer_y2_offset - 0.02
-                )
-            fancy = FancyBboxPatch(highlight_pos, 0.15, 0.1,
-                                    boxstyle='square,pad=0.001',
-                                    fc='pink', ec='red',
-                                    )
-            ax.add_patch(fancy)
+            expcol = self.net.active_layer.position * self.xscale + layer_x_offset
+            self.draw_highlight(ax, expcol)
 
     def _draw_expected(self, ax: Axes, result: TrainStepResultAny):
         """
@@ -336,6 +339,15 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         expcol = len(self.net.layers) * self.xscale
         positions = self.positions
         # Draw the expected output values next to each output node.
+        # If the loss is available, draw it.
+        # See the context manager method training_loss.
+        if isinstance(result, TrainLossStepResult):
+            ax.annotate(f'Loss={result.loss:.2f}', (expcol, layer_y2_offset), # type: ignore
+                        color='red',
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                    )
+            self.draw_highlight(ax, expcol)
         for idx, node in enumerate(self.net.output_layer.real_nodes):
             pos = positions[node]
             loc = (expcol, pos[1])
@@ -355,33 +367,33 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                     horizontalalignment='center',
                     verticalalignment='center',
                 )
-        # If the loss is available, draw it.
-        # See the context manager method training_loss.
-        if isinstance(result, TrainLossStepResult):
-            loss_pos = expcol, layer_y_offset
-            ax.annotate(self.trainer.loss_function.name, loss_pos, # type: ignore
-                        color='red',
-                        horizontalalignment='center',
-                        verticalalignment='center',
-                    )
-            ax.annotate(f'Loss={result.loss:.2f}', (expcol, layer_y2_offset), # type: ignore
-                        color='red',
-                        horizontalalignment='center',
-                        verticalalignment='center',
-                    )
+        ax.annotate(self.trainer.loss_function.name, (expcol, layer_y_offset), # type: ignore
+                    color='red',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                )
 
     def _draw_epoch(self, ax: Axes, result: TrainStepResultAny):
         figure = ax.figure
         if figure is None:
             raise ValueError('No figure for axes')
-        figure.text(0.90, 0.88, f'Datum {result.datum_no+1}/{result.datum_max}', # type: ignore
-                    color='red',
-                    horizontalalignment='right',
-                    verticalalignment='bottom',
-                    )
-        figure.text(0.125, 0.88, f'Epoch {result.epoch+1}/{result.epoch_max}', # type: ignore
+        msg = (f'Epoch {result.epoch+1}/{result.epoch_max}'   # type: ignore
+             + f' Datum {result.datum_no+1}/{result.datum_max}') # type: ignore
+        figure.text(0.125, 0.88, msg, # type: ignore
                     color='red',
                     horizontalalignment='left',
+                    verticalalignment='bottom',
+                    )
+
+    def _draw_step(self, ax: Axes, result: StepResultAny):
+        figure = ax.figure
+        if figure is None:
+            raise ValueError('No figure for axes')
+        step = cast(StepResult[StepType], result)
+        msg = f'Step {step.type}'
+        figure.text(0.90, 0.88, msg, # type: ignore
+                    color='red',
+                    horizontalalignment='right',
                     verticalalignment='bottom',
                     )
 

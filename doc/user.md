@@ -15,25 +15,32 @@ classDiagram
 
   }
   HeEtAl --|> Randomizer
-  class Network {
-    + str name
-    + Layer input_layer
-    + Layer output_layer
-    + Node[] nodes
-    + Node[] real_nodes
-    + Edge[] edges
-    __call__(float[]) float[]
+  namespace core {
+    class Network {
+        + str name
+        + Layer input_layer
+        + Layer output_layer
+        + Node[] nodes
+        + Node[] real_nodes
+        + Edge[] edges
+        __call__(float[]) float[]
+    }
+    class Netgraph {
+        __call__(float[]) float[]
+        __call__(TrainingData)
+    }
+    class Trainer {
+        train1(float[] input, float[] expected)
+        __call__(TrainingData)
+    }
   }
-  class Netgraph {
-    __call__(float[]) float[]
-    __call__(TrainingData)
-  }
-  class Filter {
-    prefilter(StepType) bool
-    filter(StepType) bool
-    postfilter(StepType) bool
-  }
-  namespace filters {
+
+  namespace filter_and_trace {
+    class Filter {
+        prefilter(StepType) bool
+        filter(StepType) bool
+        postfilter(StepType) bool
+    }
     class OutputOnlyFilter {
     }
     class EveryNFilter {
@@ -43,12 +50,32 @@ classDiagram
     class FilterChain {
 
     }
+    class Trace {
+        __call__(StepType, StepResult)
+    }
+    class PrintTrace {
+
+    }
+    class CollectTrace {
+
+    }
+    class NullTrace {
+
+    }
   }
   OutputOnlyFilter --|> Filter
   EveryNFilter --|> Filter
   FilterChain --|> Filter
   FilterChain "*" --> Filter
-
+  CollectTrace --|> Trace
+  NullTrace --|> Trace
+  PrintTrace --|> Trace
+  Trace ..> Network : Inject
+  Trace ..> Trainer : Inject
+  Trace ..> Netgraph : Inject
+  Network ..> Trace : Invoke
+  Trainer ..> Trace : Invoke
+  Netgraph ..> Trace : Invoke
   class ActivationFunction {
     __call__(float) float
     derivative(float) float
@@ -58,10 +85,6 @@ classDiagram
   }
   ReLU --|> ActivationFunction
 
-  class Trainer {
-    train1(float[] input, float[] expected)
-    __call__(TrainingData)
-  }
   namespace LossFunctions {
     class LossFunction {
         __call__(float[]) float

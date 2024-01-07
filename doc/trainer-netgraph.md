@@ -89,30 +89,29 @@ classDiagram
   class Step {
     + StepType type
   }
-  namespace step {}
-    namespace Steps {
+  namespace step {
     class InitStep {
         + float[] weights
     }
-        class EvalStep {
-            + StepType type
-            + float[] values
-        }
-        class ForwardStep {
-
-        }
-        class OutputStep {
-
-        }
-        class TrainStep {
-            + float[] input
-            + float[] expected
-        }
-        TrainStep --|> Step
-        class ForwardTrainStep {
-
-        }
+    class EvalStep {
+        + StepType type
+        + float[] values
     }
+    class ForwardStep {
+
+    }
+    class OutputStep {
+
+    }
+    class TrainStep {
+        + float[] input
+        + float[] expected
+    }
+    class ForwardTrainStep {
+
+    }
+  }
+  TrainStep --|> Step
   ForwardTrainStep --|> EvalStep
   ForwardTrainStep --|> TrainStep
   class OutputTrainStep {
@@ -169,13 +168,23 @@ classDiagram
   ForwardStep ..> ForwardTrainStep: extend
   OutputStep ..> OutputTrainStep : extend
 
-  class Filter {
-    prefilter(StepType) bool
-    filter(StepType) bool
-    postfilter(StepType) bool
+  namespace filter_and_trace {
+    class Filter {
+        prefilter(StepType) bool
+        filter(StepType) bool
+        postfilter(StepType) bool
+    }
+    class FilterChain {
+
+    }
+    class Trace {
+        __call__(StepType, StepResult)
+    }
   }
   Netgraph --* Filter
   Network --* Filter
+  Netgraph --* Trace
+  Network --* Trace
   class TrainingData {
     + (input expected)
   }
@@ -193,6 +202,7 @@ classDiagram
   LossFunction ..> Output
   Trainer ..> TrainingData
   Trainer --* Filter
+  Trainer --* Trace
   Trainer --* Network
   Netgraph --* Trainer
 

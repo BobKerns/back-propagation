@@ -185,6 +185,16 @@ class ActivationFunction(Protocol):
         ...
 
 @runtime_checkable
+class Randomizer(Protocol):
+    """
+    The protocol for a randomizer.
+    """
+    def __call__(self, shape: tuple[int, int], /) -> NPFloat2D:
+        """Return a random matrix of the given shape."""
+        ...
+
+
+@runtime_checkable
 class Builder(Protocol):
     """
     The protocol for a builder.
@@ -242,5 +252,5 @@ class Filter(Protocol):
 __all__ = [
     'EvalProtocol', 'NetProtocol', 'TrainProtocol', 'GraphProtocol',
     'LossFunction', 'ActivationFunction',
-    'Builder', 'Filter'
+    'Randomizer', 'Builder', 'Filter'
 ]

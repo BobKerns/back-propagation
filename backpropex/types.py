@@ -15,6 +15,8 @@ from numpy.typing import NDArray
 
 type NPFloats = NDArray[np.float_|np.int_]
 type FloatSeq = Sequence[float|int]|tuple[float|int]|NPFloats
+type NPFloat2D = np.ndarray[tuple[int, int], np.dtype[np.float_]]
+
 
 class NetTuple(Protocol):
     """Constructor for input or output named tuples"""

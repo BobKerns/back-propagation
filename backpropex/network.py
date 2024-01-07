@@ -72,6 +72,7 @@ class Network(NetProtocol):
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
                  builder: Optional[Builder|type[Builder]] = DefaultBuilder,
+                 randomizer: Optional[Randomizer|type[Randomizer]] = HeEtAl,
                  filter: Optional[Filter|type[Filter]] = None,
                  **kwargs: Any
                  ):
@@ -100,6 +101,25 @@ class Network(NetProtocol):
             builder(self, *layers, **kwargs)
         else:
             raise TypeError(f'Invalid builder type: {builder}')
+
+        if isinstance(randomizer, type):
+            self.randomizer = randomizer()
+        elif isinstance(randomizer, Randomizer):
+            self.randomizer = randomizer
+        else:
+            raise TypeError(f'randomizer must be a Randomizer or a Randomizer type, not {type(randomizer)}')
+
+        # Set weights
+        for (prev_layer, next_layer) in zip(self.layers[:-1], self.layers[1:]):
+            prevCount = len(prev_layer.nodes)
+            if next_layer.layer_type == LayerType.Output:
+                nextCount = len(next_layer.nodes)
+            else:
+                nextCount = len(next_layer.nodes)
+            w = self.randomizer((prevCount, nextCount))
+            for (nidx, node) in enumerate(next_layer.nodes):
+                for (pidx, edge) in enumerate(node.edges_to):
+                    edge.weight = w[pidx][nidx]
 
         self.max_layer_size = max(len(layer) for layer in self.layers)
         self.input_type = self.mk_namedtuple('input', self.input_layer)

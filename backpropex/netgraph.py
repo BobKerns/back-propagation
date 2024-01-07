@@ -114,7 +114,10 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
             xpos = pos[0] + 0.5 if node.is_bias else pos[0]
             ypos = 0 if node.is_bias else pos[1]
             return (xpos * self.xscale + 0.08, ypos * self.yscale + self.margin)
-        return {node: place(node) for node in self.net.nodes}
+        return {
+            node: place(node)
+            for node in self.net.nodes
+        }
 
     @property
     def node_colors(self) -> list[float]:
@@ -347,17 +350,25 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                                     boxstyle='larrow,pad=0.001',
                                     fc='white', ec='red')
             ax.add_patch(fancy)
+        ax.annotate('Expected', (expcol, layer_y0_offset), # type: ignore
+                    color='red',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                )
         # If the loss is available, draw it.
         # See the context manager method training_loss.
         if isinstance(result, TrainLossStepResult):
             loss_pos = expcol, layer_y_offset
             ax.annotate(self.trainer.loss_function.name, loss_pos, # type: ignore
                         color='red',
-                        horizontalalignment='center')
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                    )
             ax.annotate(f'Loss={result.loss:.2f}', (expcol, layer_y2_offset), # type: ignore
                         color='red',
-                        horizontalalignment='center'
-                        )
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                    )
 
     def _draw_epoch(self, ax: Axes, result: TrainStepResultAny):
         figure = ax.figure

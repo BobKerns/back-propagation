@@ -1,8 +1,12 @@
 """
 This module provides tracing functions for the backpropex package.
+
+Adding a trace to a `Network`, `Trainer` or `Netgraph` will allow you to
+trace the results of the steps without the overhead of creating a graph
+image for each step.
 """
 
-from typing import Any, Optional, cast
+from typing import Any, Optional
 from backpropex.protocols import Filter, Trace
 from backpropex.steps import StepResultAny, StepType
 from backpropex.utils import make
@@ -15,14 +19,15 @@ class BaseTrace(Trace):
 
 
     def __init__(self,
-                 filter: Optional[Filter] = None,
+                 filter: Optional[Filter|type[Filter]] = None,
                  **kwargs: Any) -> None:
         """
         Initialize the trace.
 
         :param kwargs: Arguments for the trace.
         """
-        self._filter = cast(Filter, make(filter, Filter))
+        if filter is not None:
+            self._filter = make(filter, Filter)
         super().__init__(**kwargs)
 
     def filter(self, step: StepType, result: StepResultAny) -> bool:
@@ -38,8 +43,8 @@ class PrintTrace(BaseTrace):
     """
     A trace that prints the results.
     """
-    def __init__(self, filter: Filter | None = None, **kwargs: Any) -> None:
-        super().__init__(filter, **kwargs)
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     def __call__(self, step: StepType, result: StepResultAny, /) -> None:
         """
@@ -82,3 +87,10 @@ class NullTrace(Trace):
         :param result: The step result.
         """
         pass
+
+__all__ = [
+    'BaseTrace',
+    'CollectTrace',
+    'NullTrace',
+    'PrintTrace',
+]

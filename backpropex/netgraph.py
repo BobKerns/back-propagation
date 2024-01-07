@@ -416,6 +416,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     def __call__(self, input: FloatSeq, /, *,
                 label: Optional[str] = None,
                 filter: Optional[Filter|type[Filter]] = None,
+                trace: Optional[Trace|type[Trace]] = None,
                 ) -> Generator[EvalStepResultAny, Any, None]:
         ...
     @overload
@@ -423,6 +424,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                  epochs: int=1000,
                  learning_rate: float=0.1,
                  filter: Optional[Filter|type[Filter]] = None,
+                 trace: Optional[Trace|type[Trace]] = None,
             ) -> Generator[TrainStepResultAny, Any, None]:
         ...
     def __call__(self, data: FloatSeq|TrainingData, /, *,
@@ -430,12 +432,27 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                  learning_rate: float=0.1,
                  label: Optional[str] = None,
                  filter: Optional[Filter|type[Filter]] = None,
+                 trace: Optional[Trace|type[Trace]] = None,
             ) -> Generator[StepResultAny, Any, None]:
         """
+        Evaluate or train the network. The network is drawn after each step (unless
+        disabled by a filter).
+
+        :param data: The input data to evaluate or train on.
+        :param epochs: The number of epochs to train for. Only applies if applied to a `Trainer`.
+        :param learning_rate: The learning rate to use. Only applies if applied to a `Trainer`.
+        :param label: The label to use for the diagram.
+        :param filter: A filter to apply to the steps, or None to accept all steps. Only steps
+                       accepted by the filter will be drawn.
+        :param trace: a `Trace` to apply to the steps. The trace will be called for each step
+                      and can print or collect the steps for later examination.
         """
+        _trace = make(trace, Trace)
         def do_trace[R: StepResultAny](result: R) -> R:
             if self._trace is not None:
                 self._trace(result.type, result)
+            if _trace is not None:
+                _trace(result.type, result)
             return result
 
         with self.net.filter(filter):

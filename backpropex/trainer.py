@@ -78,9 +78,15 @@ class Trainer(TrainProtocol):
                             input = np.array(input)
                             expected = np.array(expected)
                             with self.training_datum(idx, datum_max, input, expected):
-                                yield from self.train_one(input, expected,
-                                                        datum_number=idx,
-                                                        datum_max=datum_max)
+                                # Filter out the initialized steps after the first epoch/datum
+                                yield from (
+                                    step
+                                    for step in self.train_one(input, expected,
+                                                            datum_number=idx,
+                                                            datum_max=datum_max)
+                                    if (step.type != StepType.Initialized
+                                        or (epoch == 0 and idx == 0))
+                                )
 
 
     @contextmanager

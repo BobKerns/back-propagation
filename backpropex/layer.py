@@ -86,7 +86,7 @@ class Layer:
 
     @property
     def values(self):
-        return [n.value for n in self.real_nodes]
+        return (n.value for n in self.real_nodes)
 
     @values.setter
     def values(self, values: FloatSeq):

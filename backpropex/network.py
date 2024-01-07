@@ -60,10 +60,10 @@ class Network(NetProtocol):
     """
     A neural network.
     """
-    graph: DiGraph = DiGraph()
+    #graph: DiGraph = DiGraph()
     input_type: NetTuple
     output_type: NetTuple
-    layers: Sequence[Layer]
+    layers: list[Layer]
     max_layer_size: int
     name: str
 
@@ -83,6 +83,7 @@ class Network(NetProtocol):
         :param activation_functions: The activation function for each layer.
         """
         self.net = self
+        self.layers = list()
 
         if isinstance(filter, type):
             self._filter = filter()
@@ -90,6 +91,8 @@ class Network(NetProtocol):
             self._filter = filter
 
         self.name = name if name is not None else f'Network_{next(ids)}'
+
+        context = self.Context(self)
 
         if isinstance(builder, type):
             builder()(self, *layers, **kwargs)

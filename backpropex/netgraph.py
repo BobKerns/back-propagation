@@ -14,6 +14,7 @@ from matplotlib.colors import Colormap, Normalize
 from matplotlib.patches import FancyBboxPatch
 
 from networkx import (
+     DiGraph,
      draw_networkx_edges, # type: ignore
      draw_networkx_nodes, # type: ignore
  )
@@ -59,6 +60,8 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
 
     _filter: Optional[Filter|type[Filter]] = None
 
+    graph: DiGraph
+
     @overload
     def __init__(self, net: NetProtocol, /, *,
                  margin: float=0.13,
@@ -89,7 +92,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         self.xscale = 1.0 / (len(self.net.layers) + 0.4)
         self.yscale = 1.0 / (self.net.max_layer_size + 1)
 
-        _filter = filter
+        self.graph = DiGraph()
 
     @cached_property
     def positions(self):

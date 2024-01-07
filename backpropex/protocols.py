@@ -44,8 +44,7 @@ class NetProtocol(EvalProtocol, Protocol):
     A neural network. This is the public protocol by which other classes interact with the network.
     """
     net: 'NetProtocol'
-    graph: DiGraph = DiGraph()
-    layers: Sequence['Layer']
+    layers: list['Layer']
     max_layer_size: int
     name: str
 

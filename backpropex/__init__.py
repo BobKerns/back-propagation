@@ -11,3 +11,4 @@ from .builder import *
 from .netgraph import *
 from .trainer import *
 from .filters import *
+from .trace import *

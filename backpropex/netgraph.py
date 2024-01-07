@@ -30,8 +30,9 @@ from backpropex.steps import (
     StepResultAny, EvalStepResultAny, TrainStepResultAny,
 )
 from backpropex.protocols import (
-    EvalProtocol, Filter, GraphProtocol, TrainProtocol, NetProtocol,
+    EvalProtocol, Filter, GraphProtocol, Trace, TrainProtocol, NetProtocol,
 )
+from backpropex.utils import make
 
 # Constants for drawing the network
 layer_x_offset = 0.085
@@ -60,6 +61,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     yscale: float
 
     _filter: Optional[Filter|type[Filter]] = None
+    _trace: Optional[Trace|type[Trace]] = None
 
     graph: DiGraph
 
@@ -67,18 +69,21 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     def __init__(self, net: NetProtocol, /, *,
                  margin: float=0.13,
                  filter: Optional[Filter|type[Filter]] = None,
+                 trace: Optional[Trace|type[Trace]] = None,
                  ) -> None:
         ...
     @overload
     def __init__(self, trainer: TrainProtocol, /, *,
                  margin: float=0.13,
                  filter: Optional[Filter|type[Filter]] = None,
+                 trace: Optional[Trace|type[Trace]] = None,
                  ) -> None:
         ...
 
     def __init__(self, proxy: NetProtocol|TrainProtocol, /, *,
                  margin: float=0.13,
                  filter: Optional[Filter|type[Filter]] = None,
+                 trace: Optional[Trace|type[Trace]] = None,
                  ) -> None:
         """
         Initialize the graph drawer for either  a network or a trainer.
@@ -95,7 +100,10 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
 
         self.graph = DiGraph()
 
-        self._filter = filter
+        if filter is not None:
+            self._filter = make(filter, Filter)
+        if trace is not None:
+            self._trace = make(trace, Trace)
 
         coolwarms: Sequence[Colormap] = colormaps.get_cmap('coolwarm'),
         self.coolwarm = coolwarms[0]
@@ -418,15 +426,24 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
             ) -> Generator[StepResultAny, Any, None]:
         """
         """
+        def do_trace[R: StepResultAny](result: R) -> R:
+            if self._trace is not None:
+                self._trace(result.type, result)
+            return result
+
         with self.net.filter(filter):
             with self.net.filter(self._filter):
                 if self.trainer is None:
-                    yield from self.eval( cast(FloatSeq, data),
+                    results = self.eval(cast(FloatSeq, data),
                                         label=label)
                 else:
-                    yield from self.train(cast(TrainingData, data),
+                    results = self.train(cast(TrainingData, data),
                                         epochs=epochs,
                                         learning_rate=learning_rate)
+                yield from (
+                    do_trace(step)
+                    for step in results
+                )
 
     def eval(self, data: FloatSeq, /, *,
                 label: Optional[str] = None,

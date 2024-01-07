@@ -22,7 +22,10 @@ from backpropex.types import (
     FloatSeq, NPFloats,
     TrainingData, TrainingInfo,
 )
-from backpropex.protocols import Filter, NetProtocol, TrainProtocol
+from backpropex.protocols import (
+    Filter, NetProtocol, TrainProtocol, Trace,
+)
+from backpropex.utils import make
 
 class Trainer(TrainProtocol):
     """
@@ -44,18 +47,25 @@ class Trainer(TrainProtocol):
     loss: Optional[float] = None
 
     _filter: Optional[Filter|type[Filter]] = None
+    _trace: Optional[Trace|type[Trace]] = None
 
     def __init__(self, network: NetProtocol, /, *,
                  loss_function: LossFunction = MeanSquaredError,
                  filter: Optional[Filter|type[Filter]] = None,
+                 trace: Optional[Trace|type[Trace]] = None,
                  ):
         self.net = network
         self.loss_function = loss_function
+        if filter is not None:
+            self._filter = make(filter, Filter)
+        if trace is not None:
+            self._trace = make(trace, Trace)
 
     def __call__(self, data: TrainingData, /, *,
                     epochs: int=1, batch_size: int=1,
                     learning_rate: float=0.1,
                     filter: Optional[Filter|type[Filter]] = None,
+                    trace: Optional[Trace|type[Trace]] = None,
                     ) -> Generator[TrainStepResultAny, Any, None]:
         """
         Train the network on the given training data.
@@ -69,25 +79,25 @@ class Trainer(TrainProtocol):
         The training data is processed in batches. The batch size is the number
         of training data tuples that are processed before the weights are updated.
         """
-        with self.net.filter(filter):
-            with self.net.filter(self._filter):
-                datum_max = len(data)
-                for epoch in range(epochs):
-                    with self.training_epoch(epoch, epochs):
-                        for idx, (input, expected) in enumerate(data):
-                            input = np.array(input)
-                            expected = np.array(expected)
-                            with self.training_datum(idx, datum_max, input, expected):
-                                # Filter out the initialized steps after the first epoch/datum
-                                yield from (
-                                    step
-                                    for step in self.train_one(input, expected,
-                                                            datum_number=idx,
-                                                            datum_max=datum_max)
-                                    if (step.type != StepType.Initialized
-                                        or (epoch == 0 and idx == 0))
-                                )
-
+        with self.net.trace(trace):
+            with self.net.filter(filter):
+                with self.net.filter(self._filter):
+                    datum_max = len(data)
+                    for epoch in range(epochs):
+                        with self.training_epoch(epoch, epochs):
+                            for idx, (input, expected) in enumerate(data):
+                                input = np.array(input)
+                                expected = np.array(expected)
+                                with self.training_datum(idx, datum_max, input, expected):
+                                    # Filter out the initialized steps after the first epoch/datum
+                                    yield from (
+                                        step
+                                        for step in self.train_one(input, expected,
+                                                                datum_number=idx,
+                                                                datum_max=datum_max)
+                                        if (step.type != StepType.Initialized
+                                            or (epoch == 0 and idx == 0))
+                                    )
 
     @contextmanager
     def training_epoch(self, epoch: int, epoch_max: int):

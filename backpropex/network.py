@@ -22,7 +22,9 @@
     other examples you may have seen.
 """
 
-from typing import Any, Callable, Generator, NamedTuple, Optional
+from typing import (
+    Any, Callable, Generator, NamedTuple, Optional,
+)
 from collections.abc import Iterable
 from contextlib import contextmanager
 
@@ -43,20 +45,15 @@ from backpropex.steps import (
 from backpropex.types import (
     FloatSeq, LayerType, NetTuple,
 )
-from backpropex.protocols import Builder, BuilderContext, NetProtocol, Filter, Randomizer
+from backpropex.protocols import (
+    Builder, BuilderContext, NetProtocol, Filter, Randomizer,
+    Trace,
+)
 from backpropex.edge import Edge
 from backpropex.layer import Layer
 from backpropex.node import Node
 from backpropex.filters import FilterChain
-
-def _ids():
-    """Generate unique ids."""
-    idx = 0
-    while True:
-        yield idx
-        idx += 1
-
-ids = _ids()
+from backpropex.utils import ids, make
 
 class Network(NetProtocol):
     """
@@ -70,12 +67,14 @@ class Network(NetProtocol):
     name: str
 
     _filter: Optional[Filter] = None
+    _trace: Optional[Trace] = None
 
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
-                 builder: Optional[Builder|type[Builder]] = DefaultBuilder,
-                 randomizer: Optional[Randomizer|type[Randomizer]] = HeEtAl,
+                 builder: Builder|type[Builder] = DefaultBuilder,
+                 randomizer: Randomizer|type[Randomizer] = HeEtAl,
                  filter: Optional[Filter|type[Filter]] = None,
+                 trace: Optional[Trace|type[Trace]] = None,
                  **kwargs: Any
                  ):
         """
@@ -97,19 +96,12 @@ class Network(NetProtocol):
 
         context = self.Context(self)
 
-        if isinstance(builder, type):
-            builder()(context, *layers, **kwargs)
-        elif isinstance(builder, Builder):
-            builder(context, *layers, **kwargs)
-        else:
-            raise TypeError(f'Invalid builder type: {builder}')
+        builder = make(builder, Builder)
+        builder(context, *layers, **kwargs)
 
-        if isinstance(randomizer, type):
-            self.randomizer = randomizer()
-        elif isinstance(randomizer, Randomizer):
-            self.randomizer = randomizer
-        else:
-            raise TypeError(f'randomizer must be a Randomizer or a Randomizer type, not {type(randomizer)}')
+        self.randomizer = make(randomizer, Randomizer)
+        if trace is not None:
+            self._trace = make(trace, Trace)
 
         # Set weights
         for (prev_layer, next_layer) in zip(self.layers[:-1], self.layers[1:]):
@@ -135,13 +127,22 @@ class Network(NetProtocol):
         """
         Check if the filter allows the step to proceed.
         """
-        if self._filter is not None:
-            if self._filter(type, None):
+        result: Optional[R] = None
+        def mk_result_cached():
+            nonlocal result
+            if result is None:
                 result = mk_result()
                 if result.type != type:
                     raise ValueError(f'Wrong result type: {result.type}')
-                if self._filter(type, result):
-                    yield result
+            return result
+
+        if self._trace is not None:
+            self._trace(type, mk_result_cached())
+
+        if self._filter is not None:
+            if self._filter(type, None):
+                if self._filter(type, mk_result_cached()):
+                    yield mk_result_cached()
                 else:
                     yield None
             else:
@@ -149,10 +150,7 @@ class Network(NetProtocol):
             if self._filter(type, False):
                 raise StopIteration
         else:
-            result = mk_result()
-            if result.type != type:
-                raise ValueError(f'Wrong result type: {result.type}')
-            yield result
+            yield mk_result_cached()
 
     def mk_namedtuple(self, suffix: str, layer: Layer) -> NetTuple:
         fields = [
@@ -175,7 +173,7 @@ class Network(NetProtocol):
     @contextmanager
     def filter(self, _filter: Filter|type[Filter]|None, /) -> Generator[Filter |  None, Any, None]:
         """
-        Emable a filter.
+        Enable a filter.
         """
         if _filter is None:
             yield self._filter
@@ -191,55 +189,84 @@ class Network(NetProtocol):
             yield _ifilter
             self._filter = prev
 
+    @contextmanager
+    def trace(self, trc:Optional[Trace|type[Trace]],/) -> Generator[Trace | None, Any, None]:
+        """
+        Enable a trace.
+        """
+        _trc = make(trc, Trace) if trc is not None else None
+        old = self._trace
+        if self._trace and trc:
+            def both(step: StepType, result: StepResultAny):
+                if self._trace is not None:
+                    self._trace(step, result)
+                trc(step, result)
+            self._trace = both
+            yield both
+        elif _trc is not None:
+            self._trace = _trc
+            yield _trc
+        else:
+            def neither(step: StepType, result: StepResultAny):
+                pass
+            yield neither
+        self._trace = old
+
     def __call__(self, input: FloatSeq, /, *,
                  label: Optional[str] = None,
                  filter: Optional[Filter|type[Filter]] = None,
+                 trace: Optional[Trace|type[Trace]] = None,
                  ) -> Generator[EvalStepResultAny, Any, None]:
         """
         Evaluate the network for a given input. Returns a generator that produces
         diagrams of the network as it is evaluated. The final value is the output
         from the network as a named tuple.
         """
-        with self.filter(filter):
-            with self.filter(self._filter):
-                with self.filterCheck(StepType.Initialized,
-                                lambda : InitStepResult(StepType.Initialized)) as step:
-                    if step:
-                        yield step
-                layer = self.layers[0]
-                layer.values = input
-                with self.step_active(layer):
-                    in_tuple = self.input_type(*input)
-                    with self.filterCheck(StepType.Input,
-                                    lambda : EvalInputStepResult(StepType.Input, layer=layer, input=in_tuple)) as step:
+        with self.trace(trace):
+            with self.filter(filter):
+                with self.filter(self._filter):
+                    with self.filterCheck(StepType.Initialized,
+                                    lambda : InitStepResult(StepType.Initialized)) as step:
                         if step:
                             yield step
-                for layer in self.layers[1:]:
+                    layer = self.layers[0]
+                    layer.values = input
                     with self.step_active(layer):
-                        for node in layer.real_nodes:
-                            value = sum(
-                                (
-                                    edge.weight * edge.from_.value
-                                    for edge in node.edges_to
-                                    ))
-                            node.value = node.activation(value)
-                        def mk_forward():
-                            return EvalForwardStepResult(StepType.Forward,
-                                                        layer=layer,
-                                                        values=tuple(node.value for node in layer.real_nodes))
-                        def mk_output():
-                            return EvalOutputStepResult(StepType.Output,
-                                                        layer=self.output_layer,
-                                                        output=self.output_type(*self.output))
-                        def mk_step[R: StepResultAny]() :
-                            match(layer.layer_type):
-                                case LayerType.Output:
-                                    return StepType.Output, mk_output
-                                case _:
-                                    return StepType.Forward, mk_forward
-                        with self.filterCheck(*mk_step()) as step:
+                        in_tuple = self.input_type(*input)
+                        with self.filterCheck(StepType.Input,
+                                        lambda : EvalInputStepResult(StepType.Input,
+                                                                     layer=layer,
+                                                                     input=in_tuple)) as step:
                             if step:
                                 yield step
+                    for layer in self.layers[1:]:
+                        with self.step_active(layer):
+                            for node in layer.real_nodes:
+                                value = sum(
+                                    (
+                                        edge.weight * edge.from_.value
+                                        for edge in node.edges_to
+                                        ))
+                                node.value = node.activation(value)
+                            def mk_forward():
+                                return EvalForwardStepResult(StepType.Forward,
+                                                            layer=layer,
+                                                            values=tuple(node.value
+                                                                         for node in layer.real_nodes
+                                                                         ))
+                            def mk_output():
+                                return EvalOutputStepResult(StepType.Output,
+                                                            layer=self.output_layer,
+                                                            output=self.output_type(*self.output))
+                            def mk_step[R: StepResultAny]() :
+                                match(layer.layer_type):
+                                    case LayerType.Output:
+                                        return StepType.Output, mk_output
+                                    case _:
+                                        return StepType.Forward, mk_forward
+                            with self.filterCheck(*mk_step()) as step:
+                                if step:
+                                    yield step
 
     # For use by the builder
     class Context(BuilderContext):

@@ -64,6 +64,10 @@ class NetProtocol(EvalProtocol, Protocol):
         /,) -> Generator[R|None, Any, None]:
         ...
 
+    @contextmanager
+    def trace(self, trace: 'Trace|type[Trace]|None', /) -> Generator['Trace|None', Any, None]:
+        ...
+
     @property
     def labels(self) -> dict['Node', str]:
         ...
@@ -305,10 +309,23 @@ class Filter(Protocol):
         """
         ...
 
+class Trace(Protocol):
+    """
+    A trace for backpropex.
+    """
+    def __call__(self, step: StepType, result: StepResultAny, /) -> None:
+        """
+        Trace a step result.
+
+        :param step: The step type.
+        :param result: The step result.
+        """
+        ...
 
 __all__ = [
     'EvalProtocol', 'NetProtocol', 'BuilderContext',
     'TrainProtocol', 'GraphProtocol',
     'LossFunction', 'ActivationFunction',
-    'Randomizer', 'Builder', 'Filter'
+    'Randomizer', 'Builder',
+    'Filter', 'Trace',
 ]

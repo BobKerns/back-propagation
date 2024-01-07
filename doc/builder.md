@@ -22,7 +22,7 @@ classDiagram
   namespace concrete_nodes {
     class Bias {
         + float value = 1.0
-        + int position = 0
+        + int index = 0
     }
     class Output {
         + str label
@@ -38,35 +38,59 @@ classDiagram
   class Node {
       + int position
       + float value
+      + is_bias bool
+      + label str
+      + gradient float[]
+      + activation ActivationFunction
+      + layer Layer
+      + idx int
+      + position Point
+      + edges Edge[]
+      + edges_in Edge[]
+      + edges_out Edge[]
   }
+
+
   class Edge {
-    float weight
+    + Node from_
+    + Node to_
+    + float weight
+    + str label
   }
   class Layer {
     + int position
     + str label
+    + LayerType type
+    + float[] values
+    + Node bias
+    + node nodes
+    + node[] real_nodes
+    + int index
+    + Point position
+    add_node(Node)
+    add_nodes(Nodes[])
   }
   class ActivationFunction {
     eval(float) float
     derivative(float) float
   }
-  class Network {
-    + str name
-    eval(float[]) float[]
-    nodes() Node[]
-    real_nodes() Node[]
-    edges() Edge[]
-    edges_in(Node) Edge[]
-    edges_out(Node) Edge[]
+  class BuilderContext {
+    add_node(Node)
+    add_nodes(Iterable[Node])
+    add_edge(Edge)
+    add_edges(Iterable[Edge])
+    add_layer(Layer)
+    add_layers(Iterable[Layer])
   }
   Node "1" --o ActivationFunction
   Layer "1" --o ActivationFunction
-  Network "2..*" --* Layer : Layers
-  Network "0..*" --* Layer : Hidden
-  Network "1" --* Layer : Input
-  Network "1" --* Layer : Output
+  BuilderContext "2..*" --* Layer : Layers
+  BuilderContext "0..*" --* Layer : Hidden
+  BuilderContext "1" --* Layer : Input
+  BuilderContext "1" --* Layer : Output
 
-  Builder <--> Network
+  BuilderContext
+  Builder <--> BuilderContext
   Builder --> Input
   Builder --> Hidden
   Builder --> Output

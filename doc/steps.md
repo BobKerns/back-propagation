@@ -36,6 +36,7 @@ classDiagram
   }
   class EvalStep {
     + StepType type
+    + Layer layer
     + float[] values
   }
   class ForwardStep {

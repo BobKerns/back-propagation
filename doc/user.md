@@ -11,42 +11,70 @@ classDiagram
   class Randomizer {
 
   }
+  class HeEtAl {
+
+  }
+  HeEtAl --|> Randomizer
   class Network {
     + str name
-    eval(float[]) float[]
-    nodes() Node[]
-    real_nodes() Node[]
-    edges() Edge[]
-    edges_in(Node) Edge[]
-    edges_out(Node) Edge[]
+    + Layer input_layer
+    + Layer output_layer
+    + Node[] nodes
+    + Node[] real_nodes
+    + Edge[] edges
+    __call__(float[]) float[]
   }
   class Netgraph {
-    eval(float[]) float[]
-    train1(float[] input, float[] expected)
-    train(TrainingData)
+    __call__(float[]) float[]
+    __call__(TrainingData)
   }
   class Filter {
     prefilter(StepType) bool
     filter(StepType) bool
     postfilter(StepType) bool
   }
+  namespace filters {
+    class OutputOnlyFilter {
+    }
+    class EveryNFilter {
+        + StepType[] types
+        + int n
+    }
+    class FilterChain {
+
+    }
+  }
+  OutputOnlyFilter --|> Filter
+  EveryNFilter --|> Filter
+  FilterChain --|> Filter
+  FilterChain "*" --> Filter
 
   class ActivationFunction {
-    eval(float) float
+    __call__(float) float
     derivative(float) float
   }
+  class ReLU {
+
+  }
+  ReLU --|> ActivationFunction
 
   class Trainer {
     train1(float[] input, float[] expected)
-    train(TrainingData)
+    __call__(TrainingData)
   }
-  class LossFunction {
-    eval(float[]) float
-    derivative(float) float[]
+  namespace LossFunctions {
+    class LossFunction {
+        __call__(float[]) float
+        derivative(float) float[]
+    }
+    class MeanSquaredError {
+
+    }
   }
+  MeanSquaredError --|> LossFunction
 
   class TrainingData {
-    + (input expected)
+    + (input, expected)
   }
 
   class InputData {

@@ -22,7 +22,7 @@ classDiagram
   namespace concrete_nodes {
     class Bias {
         + float value = 1.0
-        + int position = 0
+        + int index = 0
     }
     class Output {
         + str label
@@ -38,26 +38,50 @@ classDiagram
   class Node {
       + int position
       + float value
+      + is_bias bool
+      + label str
+      + gradient float[]
+      + activation ActivationFunction
+      + layer Layer
+      + idx int
+      + position Point
+      + edges Edge[]
+      + edges_in Edge[]
+      + edges_out Edge[]
   }
   class Edge {
-    float weight
+    + Node from_
+    + Node to_
+    + float weight
+    + str label
   }
   class Layer {
     + int position
     + str label
+    + LayerType type
+    + float[] values
+    + Node bias
+    + node nodes
+    + node[] real_nodes
+    + int index
+    + Point position
+    add_node(Node)
+    add_nodes(Nodes[])
   }
   class ActivationFunction {
-    eval(float) float
+    __call__(float) float
     derivative(float) float
   }
   class Network {
     + str name
-    eval(float[]) float[]
-    nodes() Node[]
-    real_nodes() Node[]
-    edges() Edge[]
-    edges_in(Node) Edge[]
-    edges_out(Node) Edge[]
+    + Layer input_layer
+    + Layer output_layer
+    + Node[] nodes
+    + Node[] real_nodes
+    + Edge[] edges
+    __call__(float[]) float[]
+    with filter(Filter) Filter
+    with step_active(Filter) filter
   }
   Network --> InitStep : yield
   Network --> ForwardStep : yield
@@ -65,27 +89,30 @@ classDiagram
   class Step {
     + StepType type
   }
-  class InitStep {
-    + float[] weights
-  }
-  class EvalStep {
-    + StepType type
-    + float[] values
-  }
-  class ForwardStep {
+  namespace step {}
+    namespace Steps {
+    class InitStep {
+        + float[] weights
+    }
+        class EvalStep {
+            + StepType type
+            + float[] values
+        }
+        class ForwardStep {
 
-  }
-  class OutputStep {
+        }
+        class OutputStep {
 
-  }
-  class TrainStep {
-    + float[] input
-    + float[] expected
-  }
-  TrainStep --|> Step
-  class ForwardTrainStep {
+        }
+        class TrainStep {
+            + float[] input
+            + float[] expected
+        }
+        TrainStep --|> Step
+        class ForwardTrainStep {
 
-  }
+        }
+    }
   ForwardTrainStep --|> EvalStep
   ForwardTrainStep --|> TrainStep
   class OutputTrainStep {

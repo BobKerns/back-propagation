@@ -22,7 +22,7 @@ classDiagram
   namespace concrete_nodes {
     class Bias {
         + float value = 1.0
-        + int position = 0
+        + int index = 0
     }
     class Output {
         + str label
@@ -38,33 +38,60 @@ classDiagram
   class Node {
       + int position
       + float value
+      + is_bias bool
+      + label str
+      + gradient float[]
+      + activation ActivationFunction
+      + layer Layer
+      + idx int
+      + position Point
+      + edges Edge[]
+      + edges_in Edge[]
+      + edges_out Edge[]
   }
   class Edge {
-    float weight
+    + Node from_
+    + Node to_
+    + float weight
+    + str label
   }
   class Layer {
     + int position
     + str label
+    + LayerType type
+    + float[] values
+    + Node bias
+    + node nodes
+    + node[] real_nodes
+    + int index
+    + Point position
+    add_node(Node)
+    add_nodes(Nodes[])
   }
   class ActivationFunction {
     eval(float) float
     derivative(float) float
   }
-  class Graph {
-    nodes() Node[]
-    edges() Edge[]
-    edges_in(Node) Edge[]
-    edges_out(Node) Edge[]
-  }
   class Network {
     + str name
-    eval(float[]) float[]
-    nodes() Node[]
-    real_nodes() Node[]
-    edges() Edge[]
-    edges_in(Node) Edge[]
-    edges_out(Node) Edge[]
+    + Layer input_layer
+    + Layer output_layer
+    + Node[] nodes
+    + Node[] real_nodes
+    + Edge[] edges
+    __call__(float[]) float[]
+    with filter(Filter) Filter
+    with step_active(Filter) filter
   }
+  class Randomizer {
+
+  }
+  class HeEtAl {
+
+  }
+  Network --> Randomizer
+  Network ..> HeEtAl
+  HeEtAl --|> Randomizer
   Network --> InitStep : yield
   Network --> ForwardStep : yield
   Network --> OutputStep : yield
@@ -95,9 +122,6 @@ classDiagram
   Network "0..*" --* Layer : Hidden
   Network "1" --* Layer : Input
   Network "1" --* Layer : Output
-  Network "1" --* Graph
-  Graph "..*" --* Node
-  Graph "..*" --* Edge
 
   class InputData {
     float[] data

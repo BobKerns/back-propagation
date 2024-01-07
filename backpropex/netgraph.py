@@ -26,7 +26,7 @@ from backpropex.types import (
 from backpropex.steps import (
     StepResult,
     StepType,
-    InitStepResult, TrainLossStepResult, TrainStepResult,
+    TrainLossStepResult, TrainStepResult,
     StepResultAny, EvalStepResultAny, TrainStepResultAny,
 )
 from backpropex.protocols import (
@@ -65,11 +65,14 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
 
     graph: DiGraph
 
+    title: str
+
     @overload
     def __init__(self, net: NetProtocol, /, *,
                  margin: float=0.13,
                  filter: Optional[Filter|type[Filter]] = None,
                  trace: Optional[Trace|type[Trace]] = None,
+                 title: Optional[str] = None,
                  ) -> None:
         ...
     @overload
@@ -77,6 +80,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                  margin: float=0.13,
                  filter: Optional[Filter|type[Filter]] = None,
                  trace: Optional[Trace|type[Trace]] = None,
+                 title: Optional[str] = None,
                  ) -> None:
         ...
 
@@ -84,6 +88,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                  margin: float=0.13,
                  filter: Optional[Filter|type[Filter]] = None,
                  trace: Optional[Trace|type[Trace]] = None,
+                 title: Optional[str] = None,
                  ) -> None:
         """
         Initialize the graph drawer for either  a network or a trainer.
@@ -99,6 +104,8 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         self.yscale = 1.0 / (self.net.max_layer_size + 1)
 
         self.graph = DiGraph()
+
+        self.title = title or self.net.name or 'Network'
 
         if filter is not None:
             self._filter = make(filter, Filter)
@@ -136,7 +143,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     def edge_colors(self) -> list[float]:
         return [w for w in self.net.weights]
 
-    def draw(self, result: StepResultAny, /, *, label: str="Initial State"):
+    def draw(self, result: StepResultAny, /, *, label: Optional[str]=None):
         """
         Draw the network using matplotlib.
         """
@@ -157,7 +164,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                          cmap=self.coolwarm,
                          norm=wnorm,
                      )
-        ax.set_title(label)
+        ax.set_title(label or self.title)
         # Label the layers on the graph
         if self.net.active_layer is not None:
             self._draw_active(ax)
@@ -454,7 +461,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         from the network as a named tuple.
         """
         for step in self.net(data):
-            self.draw(step, label=label or 'Initial State')
+            self.draw(step, label=label)
             yield step
 
     def train(self, data: TrainingData, /, *,
@@ -467,32 +474,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         if self.trainer is None:
             raise ValueError('Cannot train a network without a trainer')
         for step in self.trainer(data, epochs=epochs, learning_rate=learning_rate):
-            if isinstance(step, InitStepResult):
-                layer_label = ''
-            else:
-                layer_label = step.layer.label
-            match step.type:
-                case StepType.Initialized:
-                    step_label = f'Initialized'
-                case StepType.TrainInput:
-                    step_label = f'Train Input: {layer_label}'
-                case StepType.TrainForward:
-                    step_label = f'Train Forward: {layer_label}'
-                case StepType.TrainOutput:
-                    step_label = f'Train Output: {layer_label}'
-                case StepType.TrainLoss:
-                    step_label = f'Train Loss: {layer_label}'
-                case StepType.TrainBackward:
-                    step_label = f'Train Backward: {layer_label}'
-                case StepType.TrainOptimize:
-                    step_label = f'Train Optimize: {layer_label}'
-                case StepType.Input:
-                    step_label = f'Eval Input: {layer_label}'
-                case StepType.Forward:
-                    step_label = f'Eval Forward: {layer_label}'
-                case StepType.Output:
-                    step_label = f'Eval Output: {layer_label}'
-            self.draw(step, label=step_label)
+            self.draw(step)
             yield step
 
     def __repr__(self):

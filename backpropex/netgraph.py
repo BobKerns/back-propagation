@@ -94,6 +94,9 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
 
         self.graph = DiGraph()
 
+
+        self._filter = filter
+
     @cached_property
     def positions(self):
         """Compute the positions of the nodes in the graph."""

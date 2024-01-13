@@ -5,8 +5,10 @@ Neural Networ Layer
 from collections.abc import Sequence
 from typing import Any, Optional
 
-from backpropex.types import FloatSeq, LayerType
-from backpropex.activation import ACT_ReLU, ActivationFunction
+import numpy as np
+
+from backpropex.types import FloatSeq, LayerType, NPFloat1D
+from backpropex.activation import ACT_Identity, ACT_ReLU, ActivationFunction
 from backpropex.node import Bias, Hidden, Input, Node, Output
 
 class Layer:
@@ -26,6 +28,14 @@ class Layer:
     # The activation function for nodes in this layer
     # We record it here so we can display it in the graph
     activation: ActivationFunction
+
+    gradient: NPFloat1D
+
+    loss: NPFloat1D
+
+    loss_delta: NPFloat1D
+
+    weight_delta: NPFloat1D
 
     def __init__(self, nodes: int, /, *,
                  position: int = 0,
@@ -51,30 +61,34 @@ class Layer:
         match layer_type:
             case LayerType.Input | LayerType.Hidden:
                 offset = (max_layer_size - nodes) / 2
+                lsize = nodes + 1
+                lnames = [f'Bias_{position}', *(names or ((None,)* nodes))]
             case LayerType.Output:
-                offset = (max_layer_size - nodes + 2) / 2\
-
+                offset = (max_layer_size - nodes + 2) / 2
+                lsize = nodes
+                lnames = names or ((None,) * nodes)
         def node(idx: int = 0, is_bias: bool = False, **kwargs: Any):
             """Construct a suitable node for this layer."""
             position = next(positions)
             pos = (float(self.position), position + offset)
             if (is_bias):
                 return Bias(pos, layer=self)
-            name = None if names is None else names[idx] or f'{self.position}_{idx}'
-            match layer_type:
-                case LayerType.Input:
-                    return Input(pos, layer=self, idx=idx, name=name, **kwargs)
-                case LayerType.Output:
+            name = None if names is None else lnames[idx] or f'{self.position}_{idx}'
+            match idx, layer_type:
+                case 0, LayerType.Input|LayerType.Hidden:
+                    self.bias = Bias(pos, layer=self, idx=idx, name=name, **kwargs)
+                    return self.bias
+                case _, LayerType.Input:
+                    return Input(pos, layer=self, idx=idx, activation=ACT_Identity, name=name, **kwargs)
+                case _, LayerType.Output:
                     return Output(pos, layer=self, idx=idx, activation=activation, name=name, **kwargs)
-                case LayerType.Hidden:
+                case _, LayerType.Hidden:
                     return Hidden(pos, layer=self, idx=idx, activation=activation, name=name, **kwargs)
-        match layer_type:
-            case LayerType.Input | LayerType.Hidden:
-                self.bias = node(is_bias=True)
-                bias = [self.bias]
-            case LayerType.Output:
-                bias = []
-        self.nodes = bias + [node(idx) for idx in range(nodes)]
+        self.nodes = [node(idx) for idx in range(lsize)]
+        self.gradient = np.zeros(len(self.nodes), np.float_)
+        self.loss = np.zeros(len(self.nodes), np.float_)
+        self.loss_delta = np.zeros(len(self.nodes), np.float_)
+        self.weight_delta = np.zeros(len(self.nodes), np.float_)    
 
     @property
     def real_nodes(self):

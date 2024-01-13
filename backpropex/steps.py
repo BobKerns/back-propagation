@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Optional, TYPE_CHECKING, Sequence
 
-from backpropex.types import NPFloats, TrainingDatum
+from backpropex.types import NPFloat1D, TrainingItem
 
 if TYPE_CHECKING:
     from backpropex.layer import Layer
@@ -52,6 +52,9 @@ type OutputStepType = Literal[StepType.Output, StepType.TrainOutput]
 
 type StepTypeAny = StepType|EvalStepType|TrainStepType|Literal[StepType.Initialized]
 
+
+type FilterArg[T: (StepTypeAny,StepType)] = None|StepResult[T]|Literal[False]
+
 @dataclass
 class StepResult[T: (StepTypeAny,StepType)]:
     """
@@ -95,7 +98,7 @@ class TrainStepResult[T: TrainStepType](LayerStepResult[T]):
     epoch_max: int
     datum_no: int
     datum_max: int
-    datum: TrainingDatum
+    datum: TrainingItem
 
 # Concrete step results
 @dataclass
@@ -139,11 +142,12 @@ class TrainLossStepResult(TrainStepResult[Literal[StepType.TrainLoss]]):
 
 @dataclass
 class TrainBackwardStepResult(TrainStepResult[Literal[StepType.TrainBackward]]):
-    gradient: NPFloats
+    gradient: NPFloat1D
 
+@dataclass
 class TrainOptimizeStepResult(TrainStepResult[Literal[StepType.TrainOptimize]]):
-    weight_delta: NPFloats
-    weight: NPFloats
+    weight_delta: NPFloat1D
+    loss: NPFloat1D
 
 type TrainStepResultAny = TrainInputStepResult|TrainForwardStepResult|TrainOutputStepResult\
     |TrainLossStepResult|TrainBackwardStepResult|TrainOptimizeStepResult\
@@ -157,5 +161,5 @@ __all__ = [
     'EvalInputStepResult', 'EvalForwardStepResult', 'EvalOutputStepResult', 'EvalStepResultAny',
     'TrainInputStepResult', 'TrainForwardStepResult', 'TrainOutputStepResult',
     'TrainLossStepResult', 'TrainBackwardStepResult', 'TrainOptimizeStepResult', 'TrainStepResultAny',
-    'StepResultAny'
+    'StepResultAny', 'FilterArg'
     ]

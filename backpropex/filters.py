@@ -11,16 +11,16 @@
 """
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 from backpropex.protocols import Filter
-from backpropex.steps import StepType
+from backpropex.steps import StepType, FilterArg, StepTypeAny
 
 
 class OutputOnlyFilter(Filter):
     """
     A filter for backpropex.
     """
-    def __call__(self, step: StepType, result: Any) -> bool:
+    def __call__[T: (StepTypeAny, StepType)](self, step: StepType, result: FilterArg[T], **kwargs: Any) -> bool:
         """
         Filter a step result.
 
@@ -46,7 +46,7 @@ class EveryNFilter(Filter):
         self.count = 0
         self.types = [step_type] if isinstance(step_type, StepType) else step_type
 
-    def __call__(self, step: StepType, result: Any) -> bool:
+    def __call__[T: (StepTypeAny, StepType)](self, step: StepType, result: FilterArg[T], **kwargs: Any) -> bool:
         if len(self.types) > 0 and step not in self.types:
             return False
         self.count += 1
@@ -55,19 +55,43 @@ class EveryNFilter(Filter):
             return True
         return False
 
+class FilterNone(Filter):
+    """
+    A filter that always returns False.
+    """
+    def __call__[T: (StepTypeAny, StepType)](self, step: StepType, result: FilterArg[T], **kwargs: Any) -> bool:
+        return False
+
 
 class FilterChain(Filter):
     """
     A filter that wraps a filter with another filter
     """
+    next: Filter
+    filter: Filter
     def __init__(self, filter: Filter, next: Filter):
         self.filter = filter
         self.next = next
 
-    def __call__(self, step: StepType, result: Any) -> bool:
-        return self.filter(step, result) and self.next(step, result)
+    def __call__[T: (StepTypeAny, StepType)](
+            self, step: StepType, result:FilterArg[T],
+            **kwargs: Any
+            ) -> bool:
+        a1: bool = cast(bool, # remove spurious Unknown
+                        self.filter(
+                            step,
+                            result,  # type: ignore
+                            **kwargs))
+        a2: bool = cast(bool, # remove spurious Unknown.
+                        self.next(
+                            step,
+                            result, # type: ignore
+                            **kwargs))
+        return a1 and a2
 
 __all__ = [
+    'EveryNFilter',
     'OutputOnlyFilter',
+    'FilterNone',
     'FilterChain',
 ]

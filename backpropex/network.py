@@ -47,7 +47,7 @@ from backpropex.types import (
 )
 from backpropex.protocols import (
     Builder, BuilderContext, NetProtocol, Filter, Randomizer,
-    Trace,
+    Trace, LossFunction,
 )
 from backpropex.edge import Edge
 from backpropex.layer import Layer
@@ -68,6 +68,7 @@ class Network(NetProtocol):
 
     _filter: Optional[Filter] = None
     _trace: Optional[Trace] = None
+    loss_function: LossFunction
 
     def __init__(self, *layers: int,
                  name: Optional[str] = None,
@@ -160,8 +161,9 @@ class Network(NetProtocol):
             if node.name is not None
         ]
         return NamedTuple(f'{sanitize(self.name)}_{suffix}', fields)
+
     @contextmanager
-    def step_active(self, layer: Layer, /):
+    def step_active(self, layer: Layer, /) -> Generator[Layer, Any, None]:
         """
         Set the active layer for the network during a training pass.
         """
@@ -197,7 +199,8 @@ class Network(NetProtocol):
         _trc = make(trc, Trace) if trc is not None else None
         old = self._trace
         if self._trace and trc:
-            def both(step: StepType, result: StepResultAny):
+            def both(step: StepType, result: StepResultAny, /,
+                     *args: Any, **kwargs: Any):
                 if self._trace is not None:
                     self._trace(step, result)
                 trc(step, result)
@@ -207,15 +210,16 @@ class Network(NetProtocol):
             self._trace = _trc
             yield _trc
         else:
-            def neither(step: StepType, result: StepResultAny):
+            def neither(step: StepType, result: StepResultAny, /,
+                        *args: Any, **kwargs: Any):
                 pass
             yield neither
         self._trace = old
 
-    def __call__(self, input: FloatSeq, /, *,
-                 label: Optional[str] = None,
+    def __call__(self, input: FloatSeq, /, *,\
                  filter: Optional[Filter|type[Filter]] = None,
                  trace: Optional[Trace|type[Trace]] = None,
+                **kwargs: Any,
                  ) -> Generator[EvalStepResultAny, Any, None]:
         """
         Evaluate the network for a given input. Returns a generator that produces
@@ -257,7 +261,7 @@ class Network(NetProtocol):
                             def mk_output():
                                 return EvalOutputStepResult(StepType.Output,
                                                             layer=self.output_layer,
-                                                            output=self.output_type(*self.output))
+                                                            output=self.output)
                             def mk_step[R: StepResultAny]() :
                                 match(layer.layer_type):
                                     case LayerType.Output:

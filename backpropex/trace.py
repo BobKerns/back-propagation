@@ -35,7 +35,8 @@ class BaseTrace(Trace):
             return True
         return self._filter(step, result)
 
-    def __call__(self, step: StepType, result: StepResultAny, /) -> None:
+    def __call__(self, step: StepType, result: StepResultAny, /,
+                 **kwargs: Any) -> None:
         ...
 
 
@@ -46,7 +47,8 @@ class PrintTrace(BaseTrace):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-    def __call__(self, step: StepType, result: StepResultAny, /) -> None:
+    def __call__(self, step: StepType, result: StepResultAny, /,
+                 **kwargs: Any) -> None:
         """
         Trace a step result.
 
@@ -65,7 +67,8 @@ class CollectTrace(BaseTrace):
         super().__init__(**kwargs)
         self.results: list[StepResultAny] = []
 
-    def __call__(self, step: StepType, result: StepResultAny, /) -> None:
+    def __call__(self, step: StepType, result: StepResultAny, /,
+                 **kwargs: Any) -> None:
         """
         Trace a step result.
 
@@ -79,7 +82,8 @@ class NullTrace(Trace):
     """
     A trace that does nothing.
     """
-    def __call__(self, step: StepType, result: StepResultAny, /) -> None:
+    def __call__(self, step: StepType, result: StepResultAny, /,
+                 **kwargs: Any) -> None:
         """
         Trace a step result.
 

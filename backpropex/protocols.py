@@ -1,28 +1,50 @@
 """
 Protocols to allow the various classes to collaborate.
+
+This avoids circular imports, as we don't need to import the classes themselves,
+and the protocols serve as templates for extension.
+
+The protocols are checked at runtime, so they can be used to check the types
+of objects created at runtime.
+
+A few key types are not defined as protocols, and are imported via the
+`if TYPE_CHECKING` mechanism, both here and elsewhere:
+
+* Node
+* Edge
+* Layer
+* LossFunction
 """
 
 from collections.abc import Iterable
 from contextlib import contextmanager
-from typing import Callable, Literal, Optional, overload, runtime_checkable, Protocol, TYPE_CHECKING, Any, Generator
+from typing import (
+    Callable, Literal, Optional, overload,
+    runtime_checkable, Protocol, TYPE_CHECKING,
+    Any, Generator
+)
 
 from backpropex.types import (
-    FloatSeq, NPFloat2D, NPFloats, TrainingData,
+    FloatSeq, NPFloat2D, NPFloat1D, TrainingData, TrainingInfo, TrainingItem
 )
 from backpropex.steps import (
     EvalStepResultAny,
+    FilterArg,
     InitStepResult,
     StepResult,
     StepResultAny,
     StepType,
+    StepTypeAny,
+    TrainBackwardStepResult,
+    TrainOptimizeStepResult,
     TrainStepResultAny
 )
 
 if TYPE_CHECKING:
-    from backpropex.layer import Layer
-    from backpropex.edge import Edge
-    from backpropex.loss import LossFunction
     from backpropex.node import Node
+    from backpropex.edge import Edge
+    from backpropex.layer import Layer
+    from backpropex.loss import LossFunction
 
 
 @runtime_checkable
@@ -33,7 +55,8 @@ class EvalProtocol(Protocol):
     This is the public protocol to evaluate a network on a given input.
     """
     def __call__(self, input: FloatSeq, /, *,
-                label: Optional[str] = None
+                label: Optional[str] = None,
+                **kwargs: Any
                 ) -> Generator[EvalStepResultAny|InitStepResult, Any, None]:
         ...
     net: 'NetProtocol'
@@ -53,8 +76,14 @@ class NetProtocol(EvalProtocol, Protocol):
     active_layer: Optional['Layer'] = None
     active_message: Optional[str] = None
 
+    loss_function: 'LossFunction'
+
     @contextmanager
     def filter(self, _filter: 'Filter|type[Filter]|None', /) -> Generator['Filter|None', Any, None]:
+        ...
+
+    @contextmanager
+    def step_active(self, layer: 'Layer', /) -> Generator['Layer', Any, None]:
         ...
 
     @contextmanager
@@ -109,7 +138,7 @@ class NetProtocol(EvalProtocol, Protocol):
         ...
 
     @property
-    def output_array(self) -> NPFloats:
+    def output_array(self) -> NPFloat1D:
         ...
     @property
     def hidden_layers(self) -> tuple['Layer', ...]:
@@ -122,19 +151,63 @@ class NetProtocol(EvalProtocol, Protocol):
         ...
 
 @runtime_checkable
+class LossFunction(Protocol):
+    """
+    The protocol for an Loss function.
+    """
+
+    name: str
+    def __call__(self, actual: NPFloat1D, expected: NPFloat1D, /,
+                 **kwargs: Any) -> float:
+        ...
+
+    def derivative(self, actual: NPFloat1D, expected: NPFloat1D, /,
+                   **kwargs: Any) -> NPFloat1D:
+        ...
+
+@runtime_checkable
 class TrainProtocol(Protocol):
     """
     A trainer for neural networks.
     This composes with the network to train it.
     """
-    def __init__(self, network: NetProtocol, /, *, loss_function: 'LossFunction'):
+    def __init__(self, network: NetProtocol, /, *,
+                 loss_function: LossFunction):
         ...
     def __call__(self, data: TrainingData, /, *,
               epochs: int=1000,
-              learning_rate: float=0.1
+              learning_rate: float=0.1,
+              **kwargs: Any
               ) -> Generator[TrainStepResultAny|InitStepResult, Any, None]:
         ...
     net: NetProtocol
+    loss_function: LossFunction
+
+
+@runtime_checkable
+class BackpropagateProtocol(Protocol):
+    """
+    A module to backpropagate the error gradient through the network.
+    """
+    def __call__(self, trainer: TrainProtocol, training_item: TrainingItem, /, *,
+                 training_info: TrainingInfo,
+                 **kwargs: Any) -> Generator[TrainBackwardStepResult, Any, None]:
+        """
+        Backpropagate the gradient through the network.
+        """
+        ...
+
+@runtime_checkable
+class OptimizerProtocol(Protocol):
+    """
+    A protocol for an optimizer.
+    """
+    def __call__(self, net: NetProtocol, loss: float, /, *,
+                 epochs: int=1000,
+                 learning_rate: float=0.1,
+                 **kwargs: Any
+                 ) -> Generator[TrainOptimizeStepResult, Any, None]:
+        ...
 
 @runtime_checkable
 class GraphProtocol(Protocol):
@@ -156,19 +229,6 @@ class GraphProtocol(Protocol):
     def __init__(self, proxy: NetProtocol|TrainProtocol, /, *,
                  margin: float=0.13,
                  ) -> None:
-        ...
-
-@runtime_checkable
-class LossFunction(Protocol):
-    """
-    The protocol for an Loss function.
-    """
-
-    name: str
-    def __call__(self, actual: NPFloats, expected: NPFloats, /) -> float:
-        ...
-
-    def derivative(self, actual: NPFloats, expected: NPFloats, /) -> NPFloats:
         ...
 
 @runtime_checkable
@@ -260,9 +320,10 @@ class Builder(Protocol):
     """
     The protocol for a builder.
     """
-    def __call__(self, net: BuilderContext, *args: Any, **kwargs: Any) -> None:
+    def __call__(self, net: BuilderContext, /,
+                 *args: Any,
+                 **kwargs: Any) -> None:
         ...
-
 
 @runtime_checkable
 class Filter(Protocol):
@@ -270,14 +331,16 @@ class Filter(Protocol):
     A filter for backpropex.
     """
     @overload
-    def __call__(self, step: StepType, result: None) -> bool:
+    def __call__(self, step: StepType, result: None, /,
+                 **kwargs: Any) -> bool:
         """
         Prefilter a step result. If False is returned, no StepResult
         will be emitted, and no Graph will be produced.
         """
         ...
     @overload
-    def __call__[T: StepType](self, step: T, result: StepResult[T]) -> bool:
+    def __call__[T: StepType](self, step: T, result: StepResult[T], /,
+                 **kwargs: Any) -> bool:
         """
         Filter a step result.
 
@@ -289,7 +352,8 @@ class Filter(Protocol):
         """
         ...
     @overload
-    def __call__(self, step: StepType, result: Literal[False]) -> bool:
+    def __call__(self, step: StepType, result: Literal[False], /,
+                 **kwargs: Any) -> bool:
         """
         Postfilter a step result.
 
@@ -299,7 +363,8 @@ class Filter(Protocol):
         """
         ...
 
-    def __call__(self, step: StepType, result: Any) -> bool:
+    def __call__[T: (StepTypeAny,StepType)](self, step: StepType, result: FilterArg[T], /,
+                 **kwargs: Any) -> bool:
         """
         Filter a step result.
 
@@ -313,7 +378,11 @@ class Trace(Protocol):
     """
     A trace for backpropex.
     """
-    def __call__(self, step: StepType, result: StepResultAny, /) -> None:
+    def __call__(self, step: StepType, result: StepResultAny, /, *,
+                 epochs: Optional[int] = 1,
+                 batch_size: Optional[int] = 1,
+                 **kwargs: Any
+                 ) -> None:
         """
         Trace a step result.
 
@@ -325,6 +394,7 @@ class Trace(Protocol):
 __all__ = [
     'EvalProtocol', 'NetProtocol', 'BuilderContext',
     'TrainProtocol', 'GraphProtocol',
+    'BackpropagateProtocol', 'OptimizerProtocol',
     'LossFunction', 'ActivationFunction',
     'Randomizer', 'Builder',
     'Filter', 'Trace',

@@ -18,12 +18,14 @@ from networkx import (
      draw_networkx_edges, # type: ignore
      draw_networkx_nodes, # type: ignore
  )
+from backpropex.layer import Layer
 
 from backpropex.node import Input, Node, Output
 from backpropex.types import (
     FloatSeq, TrainingData
 )
 from backpropex.steps import (
+    LayerStepResult,
     StepResult,
     StepType,
     TrainLossStepResult, TrainStepResult,
@@ -31,14 +33,16 @@ from backpropex.steps import (
 )
 from backpropex.protocols import (
     EvalProtocol, Filter, GraphProtocol, Trace, TrainProtocol, NetProtocol,
+    LossFunction,
 )
 from backpropex.utils import make
 
 # Constants for drawing the network
-layer_x_offset = 0.085
+layer_x_offset = 0.022
 layer_y_offset = 0.05 # Main row
 layer_y2_offset = layer_y_offset - 0.025 # second row, below main row
 layer_y0_offset = layer_y_offset + 0.025 # zeroth row, above main row
+layer_label_x_offset = 0.4
 
 
 def plen(p: tuple[float, float], n: tuple[float, float]) -> float:
@@ -66,6 +70,9 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     graph: DiGraph
 
     title: str
+
+    loss_function: LossFunction
+
 
     @overload
     def __init__(self, net: NetProtocol, /, *,
@@ -99,6 +106,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         else:
             self.net = proxy.net
             self.trainer = proxy
+            self.loss_function = proxy.loss_function
         self.margin = margin
         self.xscale = 1.0 / (len(self.net.layers) + 0.4)
         self.yscale = 1.0 / (self.net.max_layer_size + 1)
@@ -113,7 +121,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
             self._trace = make(trace, Trace)
 
         coolwarms: Sequence[Colormap] = colormaps.get_cmap('coolwarm'),
-        self.coolwarm = coolwarms[0]
+        self.color_map = coolwarms[0]
 
         for layer in self.net.layers:
             for node in layer.nodes:
@@ -143,7 +151,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
     def edge_colors(self) -> list[float]:
         return [w for w in self.net.weights]
 
-    def draw(self, result: StepResultAny, /, *, label: Optional[str]=None):
+    def draw(self, result: Optional[StepResultAny] = None, /, *, label: Optional[str]=None):
         """
         Draw the network using matplotlib.
         """
@@ -157,25 +165,26 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         norm = Normalize(vmin=minval, vmax=maxval)
         wnorm = Normalize(vmin=minweight, vmax=maxweight)
         mappable = ScalarMappable(
-                         cmap=self.coolwarm,
+                         cmap=self.color_map,
                          norm=norm,
                      )
         wmappable = ScalarMappable(
-                         cmap=self.coolwarm,
+                         cmap=self.color_map,
                          norm=wnorm,
                      )
         ax.set_title(label or self.title)
         # Label the layers on the graph
         if self.net.active_layer is not None:
             self._draw_active(ax)
-        if isinstance(result, TrainStepResult):
-            tresult = cast(TrainStepResultAny, result)
-            self._draw_expected(ax, tresult)
-            self._draw_epoch(ax, tresult)
-        self._draw_step(ax, result)
+        if result is not None:
+            if isinstance(result, TrainStepResult):
+                tresult = cast(TrainStepResultAny, result)
+                self._draw_expected(ax, tresult)
+                self._draw_epoch(ax, tresult)
+            self._draw_step(ax, result)
 
-        self._draw_nodes(ax, mappable)
-        self._draw_edges(ax, wmappable)
+        self._draw_nodes(ax, mappable, result)
+        self._draw_edges(ax, wmappable, result)
 
         self._draw_layer_labels(ax)
         cax1 = fig.add_axes((0.905, 0.50, 0.007, 0.38)) # type: ignore
@@ -196,7 +205,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                      )
         plt.show() # type: ignore
 
-    def _draw_nodes(self, ax: Axes, mappable: ScalarMappable):
+    def _draw_nodes(self, ax: Axes, mappable: ScalarMappable, step: StepResultAny|None):
         """
         Draw the nodes of the network.
         """
@@ -244,13 +253,13 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                    edgecolors='green',
                    font_color='green')
 
-    def _draw_edge_labels(self, ax: Axes, mappable: ScalarMappable):
+    def _draw_edge_labels(self, ax: Axes, mappable: ScalarMappable, step: StepResultAny|None):
         """Label the edges of the network."""
         # Label the edges. We'll need to look up node positions.
         positions = self.positions
         # Rotate through some offsets to avoid label collisions
         shifts = (0.065, 0.080, 0.055, 0.075)
-        # We group the edges per incomeing node so we can shift the labels
+        # We group the edges per incoming node so we can shift the labels
         # to avoid collisions.
         for node in self.net.nodes:
             for idx, edge in enumerate(node.edges_to):
@@ -273,13 +282,29 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                 hsv: tuple[float, float, float] = rgb_to_hsv(*color[0:3])
                 hsv = (*hsv[0:2], hsv[2] * 0.9)
                 label_color = [*hsv_to_rgb(*hsv), color[3]]
-                ax.annotate(edge.label, loc, # type: ignore
+                layer = edge.to_.layer
+                label = edge.label
+                if step is not None:
+                    match step.type:
+                        case StepType.TrainBackward:
+                            llayer: Layer = cast(LayerStepResult[Any], step).layer
+                            if layer.position >= llayer.position:
+                                partial = llayer.gradient[edge.to_.idx]
+                                label = f'{label}\n{partial:.2f}'
+                        case StepType.TrainOptimize:
+                            llayer: Layer = cast(LayerStepResult[Any], step).layer
+                            if layer.position == llayer.position:
+                                delta = llayer.weight_delta[edge.to_.idx]
+                                # Show the change just on the current layer
+                                label = f'{edge.weight-delta:.2f}\n{delta:.2f}'
+                        case _:
+                            pass
+                ax.annotate(label, loc, # type: ignore
                             color=label_color,
                             horizontalalignment='center',
                             verticalalignment='center',
                             )
-
-    def _draw_edges(self, ax: Axes, mappable: ScalarMappable):
+    def _draw_edges(self, ax: Axes, mappable: ScalarMappable, step: StepResultAny|None):
         """
         Draw the edges of the network and their labels.
         """
@@ -292,27 +317,31 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                             node_size=1000,
                             edge_color=edge_colors, # type: ignore
                             ax=ax)
-        self._draw_edge_labels(ax, mappable)
+        self._draw_edge_labels(ax, mappable, step)
 
     def _draw_layer_labels(self, ax: Axes):
         """
         Label the layers at the bottom of the graph.
         """
+        def row_start(layer: Layer, offset: float = 0.0) -> float:
+            return (layer.position + layer_label_x_offset + offset) * self.xscale + layer_x_offset
         for layer in self.net.layers:
-            xypos = (layer.position * self.xscale + layer_x_offset, layer_y_offset)
+            xypos = (
+                row_start(layer),
+                layer_y_offset)
             ax.annotate(layer.label, xypos, # type: ignore
                         horizontalalignment='center',
                         verticalalignment='center',
                         )
         for layer in self.net.layers[0:-1]:
-            xypos = ((layer.position + 0.5) * self.xscale + layer_x_offset, layer_y_offset)
+            xypos = (row_start(layer, 0.5), layer_y_offset)
             ax.annotate('Bias', xypos, # type: ignore
                         color='green',
                         horizontalalignment='center',
                         verticalalignment='center',
                         )
         for layer in self.net.layers[1:]:
-            xypos = (layer.position * self.xscale + layer_x_offset, layer_y2_offset)
+            xypos = (row_start(layer), layer_y2_offset)
             ax.annotate(layer.activation.name, xypos, # type: ignore
                         horizontalalignment='center',
                         verticalalignment='center',
@@ -325,11 +354,12 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                         horizontalalignment='center',
                         verticalalignment='center',
                         )
+        width = 0.64 / (len(self.net.layers) + 1)
         highlight_pos = (
-            expcol - layer_x_offset / 2 - 0.025,
+            expcol - layer_x_offset / 2 - 0.025 + width / 2,
             layer_y2_offset - 0.02
         )
-        fancy = FancyBboxPatch(highlight_pos, 0.13, 0.98,
+        fancy = FancyBboxPatch(highlight_pos, width, 0.98,
                                 boxstyle='square,pad=0.001',
                                 fc=(0.9, 1.0, 0.92), ec=(0.3, 1.0, 0.3),
                                 )
@@ -367,7 +397,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
             pos = positions[node]
             loc = (expcol, pos[1])
             locarrow = (expcol - 0.011, loc[1] - 0.012)
-            ax.annotate(f'{self.trainer.datum_expected[idx]:.2f}', loc, # type: ignore
+            ax.annotate(f'{self.trainer.datum.expected[idx]:.2f}', loc, # type: ignore
                         color='red',
                         horizontalalignment='center',
                         verticalalignment='center',
@@ -417,6 +447,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                 label: Optional[str] = None,
                 filter: Optional[Filter|type[Filter]] = None,
                 trace: Optional[Trace|type[Trace]] = None,
+                **kwargs: Any,
                 ) -> Generator[EvalStepResultAny, Any, None]:
         ...
     @overload
@@ -425,6 +456,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                  learning_rate: float=0.1,
                  filter: Optional[Filter|type[Filter]] = None,
                  trace: Optional[Trace|type[Trace]] = None,
+                 **kwargs: Any,
             ) -> Generator[TrainStepResultAny, Any, None]:
         ...
     def __call__(self, data: FloatSeq|TrainingData, /, *,
@@ -433,6 +465,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                  label: Optional[str] = None,
                  filter: Optional[Filter|type[Filter]] = None,
                  trace: Optional[Trace|type[Trace]] = None,
+                 **kwargs: Any,
             ) -> Generator[StepResultAny, Any, None]:
         """
         Evaluate or train the network. The network is drawn after each step (unless
@@ -447,30 +480,40 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         :param trace: a `Trace` to apply to the steps. The trace will be called for each step
                       and can print or collect the steps for later examination.
         """
-        _trace = make(trace, Trace)
+        if trace:
+            _trace = make(trace, Trace)
+        else:
+            _trace = None
         def do_trace[R: StepResultAny](result: R) -> R:
             if self._trace is not None:
                 self._trace(result.type, result)
             if _trace is not None:
                 _trace(result.type, result)
             return result
-
-        with self.net.filter(filter):
-            with self.net.filter(self._filter):
-                if self.trainer is None:
-                    results = self.eval(cast(FloatSeq, data),
-                                        label=label)
-                else:
-                    results = self.train(cast(TrainingData, data),
-                                        epochs=epochs,
-                                        learning_rate=learning_rate)
-                yield from (
-                    do_trace(step)
-                    for step in results
-                )
+        if filter is not None:
+            filter = make(filter, Filter)
+        if self.trainer is None:
+            results = self.eval(cast(FloatSeq, data),
+                                label=label,
+                                filter=filter,
+                                **kwargs
+                                )
+        else:
+            results = self.train(cast(TrainingData, data),
+                                epochs=epochs,
+                                filter=filter,
+                                learning_rate=learning_rate,
+                                **kwargs
+                                )
+        yield from (
+            do_trace(step)
+            for step in results
+        )
 
     def eval(self, data: FloatSeq, /, *,
                 label: Optional[str] = None,
+                filter: Optional[Filter] = None,
+                **kwargs: Any,
             ) -> Generator[EvalStepResultAny, Any, None]:
         """
         Evaluate the network for a given input. Returns a generator that produces
@@ -478,12 +521,16 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         from the network as a named tuple.
         """
         for step in self.net(data):
-            self.draw(step, label=label)
+            if (not filter or filter(step.type, step)):
+                if (not self._filter or self._filter(step.type, step)):
+                    self.draw(step, label=label)
             yield step
 
     def train(self, data: TrainingData, /, *,
                 epochs: int=1000,
-                learning_rate: float=0.1
+                learning_rate: float=0.1,
+                filter: Optional[Filter] = None,
+                **kwargs: Any,
                 ) -> Generator[TrainStepResultAny, Any, None]:
         """
         Train the network on the given training data.
@@ -491,7 +538,9 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         if self.trainer is None:
             raise ValueError('Cannot train a network without a trainer')
         for step in self.trainer(data, epochs=epochs, learning_rate=learning_rate):
-            self.draw(step)
+            if (not filter or filter(step.type, step)):
+                if (not self._filter or self._filter(step.type, step)):
+                    self.draw(step)
             yield step
 
     def __repr__(self):

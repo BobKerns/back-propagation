@@ -6,24 +6,27 @@ data set to train the network.
 """
 
 from contextlib import contextmanager
+from typing import Any, Generator, Optional
 from random import shuffle
 
 import numpy as np
+from backpropex.backpropagate import Backpropagate
+from backpropex.gradient_descent import GradientDescent
 
 from backpropex.loss import LossFunction, MeanSquaredError
 from backpropex.steps import (
     StepType, InitStepResult,
     EvalForwardStepResult, EvalInputStepResult, EvalOutputStepResult, StepTypeAny,
     TrainForwardStepResult, TrainInputStepResult,
-    TrainLossStepResult, TrainOutputStepResult,
+    TrainLossStepResult,TrainOutputStepResult,
     EvalStepResultAny, TrainStepResultAny, TrainStepType,
 )
 from backpropex.types import (
-    FloatSeq, NPFloats,
-    TrainingData, TrainingInfo,
+    NPFloat1D,
+    TrainingData, TrainingInfo, TrainingItem,
 )
 from backpropex.protocols import (
-    Filter, NetProtocol, TrainProtocol, Trace,
+    BackpropagateProtocol, Filter, NetProtocol, OptimizerProtocol, TrainProtocol, Trace,
 )
 from backpropex.utils import make
 
@@ -37,8 +40,7 @@ class Trainer(TrainProtocol):
     # The item within the training set currently being trained
     datum_number: Optional[int] = None
     datum_max: int = 0
-    datum_value: Optional[NPFloats] = None
-    datum_expected: Optional[NPFloats] = None
+    datum: Optional[TrainingItem] = None
     # The epoch currently being trained (pass through the training set))
     epoch_number: Optional[int] = None
     # The number of epochs to train
@@ -48,14 +50,29 @@ class Trainer(TrainProtocol):
 
     _filter: Optional[Filter|type[Filter]] = None
     _trace: Optional[Trace|type[Trace]] = None
+    _backpropagate: Optional[BackpropagateProtocol] = None
+
+    @property
+    def backpropagate(self) -> BackpropagateProtocol:
+        if self._backpropagate is None:
+            self._backpropagate = Backpropagate()
+        return self._backpropagate
+
+    _optimize: Optional[OptimizerProtocol] = None
+    @property
+    def optimize(self) -> OptimizerProtocol:
+        return self._optimize or GradientDescent()
 
     def __init__(self, network: NetProtocol, /, *,
                  loss_function: LossFunction = MeanSquaredError,
+                 learning_rate: float = 0.1,
                  filter: Optional[Filter|type[Filter]] = None,
                  trace: Optional[Trace|type[Trace]] = None,
+                 optimizer: Optional[OptimizerProtocol|type[OptimizerProtocol]] = None,
                  ):
         self.net = network
         self.loss_function = loss_function
+        self.learning_rate = learning_rate
         if filter is not None:
             self._filter = make(filter, Filter)
         if trace is not None:
@@ -63,9 +80,10 @@ class Trainer(TrainProtocol):
 
     def __call__(self, data: TrainingData, /, *,
                     epochs: int=1, batch_size: int=1,
-                    learning_rate: float=0.1,
+                    learning_rate: Optional[float] = None,
                     filter: Optional[Filter|type[Filter]] = None,
                     trace: Optional[Trace|type[Trace]] = None,
+                    **kwargs: Any
                     ) -> Generator[TrainStepResultAny, Any, None]:
         """
         Train the network on the given training data.
@@ -79,24 +97,29 @@ class Trainer(TrainProtocol):
         The training data is processed in batches. The batch size is the number
         of training data tuples that are processed before the weights are updated.
         """
-        data = [*data]
+        if learning_rate is not None:
+            self.learning_rate = learning_rate
+        # Copy the data, since we'll be shuffling it
+        tdata = [TrainingItem(np.array(input, np.float_),
+                              np.array(expected, np.float_), id)
+                for id, (input, expected) in enumerate(data)]
         with self.net.trace(trace):
             with self.net.filter(filter):
                 with self.net.filter(self._filter):
-                    datum_max = len(data)
+                    datum_max = len(tdata)
                     for epoch in range(epochs):
                         with self.training_epoch(epoch, epochs):
-                            shuffle(data)
-                            for idx, (input, expected) in enumerate(data):
-                                input = np.array(input)
-                                expected = np.array(expected)
-                                with self.training_datum(idx, datum_max, input, expected):
+                            shuffle(tdata)
+                            for idx, datum in enumerate(tdata):
+                                with self.training_datum(idx, datum_max, datum):
                                     # Filter out the initialized steps after the first epoch/datum
-                                    yield from (
+                                     yield from (
                                         step
-                                        for step in self.train_one(input, expected,
-                                                                datum_number=idx,
-                                                                datum_max=datum_max)
+                                        for step in self.train_one(datum,
+                                                                    datum_number=idx,
+                                                                    datum_max=datum_max,
+                                                                    **kwargs
+                                                                    )
                                         if (step.type != StepType.Initialized
                                             or (epoch == 0 and idx == 0))
                                     )
@@ -114,22 +137,21 @@ class Trainer(TrainProtocol):
 
     @contextmanager
     def training_datum(self, datum_number: int, datum_max: int,
-             datum_value: NPFloats, datum_expected: NPFloats):
+             datum: TrainingItem):
         """
         Set the active layer for the network during a training pass.
         """
         self.datum_number = datum_number
         self.datum_max = datum_max
-        self.datum_value = datum_value
-        self.datum_expected = datum_expected
-        yield datum_number, datum_max, datum_value, datum_expected
+        self.datum = datum
+        yield datum_number, datum_max, datum
         self.datum_number = None
         self.datum_max = 0
-        self.datum_value = None
+        self.datum = None
         self.datum_expected = None
 
     @contextmanager
-    def training_loss(self,  output: NPFloats, expected: NPFloats, /):
+    def training_loss(self,  output: NPFloat1D, expected: NPFloat1D, /):
         """
         Set the loss for the network during a training pass.
         """
@@ -139,20 +161,22 @@ class Trainer(TrainProtocol):
         self.loss = None
 
 
-    def train_one(self, input: FloatSeq, expected: FloatSeq, /,
-                  datum_number: int = 0, datum_max: int = 1,
+    def train_one(self, datum: TrainingItem, /, *,
+                  datum_number: int = 0,
+                  datum_max: int = 1,
+                  **kwargs: Any
                   ) -> Generator[TrainStepResultAny, Any, None]:
         """
         Train the network for a given input and expected output.
         """
-        input = np.array(input)
-        expected = np.array(expected)
-        with self.training_datum(datum_number, datum_max, input, expected):
+        input = np.array(datum.input)
+        expected = np.array(datum.expected)
+        with self.training_datum(datum_number, datum_max, datum):
             training_info: TrainingInfo = TrainingInfo(epoch=self.epoch_number or 0,
                                          epoch_max=self.epoch_max,
                                          datum_no=datum_number,
                                          datum_max=datum_max,
-                                         datum=(input, expected))
+                                         datum=datum)
             # Forward pass
             def map_step(step: EvalStepResultAny):
                 """Extemd the eval step with training info."""
@@ -197,35 +221,9 @@ class Trainer(TrainProtocol):
             loss = self.loss_function(output, expected)
             with self.training_loss(output, expected) as loss:
                 yield TrainLossStepResult(StepType.TrainLoss, layer=layer, loss=loss, **training_info)
-                for layer in reversed(self.net.layers[0:-1]):
-                    for node in layer.real_nodes:
-                        value = sum(edge.weight * edge.to_.value for edge in self.net.edges)
-                        print(f'TODO: Node {node.idx} value={value:.2f}')
-
-    def backpropagate(self, output: NPFloats, expected: NPFloats, /):
-        """
-        Backpropagate the gradient through the network.
-        """
-        if self.datum_expected is None:
-            raise ValueError('No expected output set')
-        with self.training_loss(output, expected) as loss:
-            grad = self.loss_function.derivative(output, expected)
-            print(f'Loss={loss:.2f}, grad={grad:.2f}')
-            # Backward pass
-            layer = self.net.layers[-1]
-            for node in layer.real_nodes:
-                node.gradient = node.value - self.datum_expected[node.idx]
-            for layer in reversed(self.net.layers[0:-1]):
-                for node in layer.real_nodes:
-                    total_weights = sum((
-                        edge.weight * (edge.to_.gradient or 0.0)
-                        for edge in node.edges_to
-                    ), 0.0)
-                    d = node.activation.derivative(node.value)
-                    gradient = (
-                        cast(float, d * edge.weight / total_weights)
-                        for edge
-                        in node.edges_to
-                    )
-                    node.gradient = np.array(gradient)
-                    print(f'TODO: Node {node.idx} gradient={node.gradient}')
+                yield from self.backpropagate(self, datum,
+                                              training_info=training_info,
+                                              **kwargs)
+                yield from self.optimize(self.net, loss,
+                                         training_info=training_info,
+                                         **kwargs)

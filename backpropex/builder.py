@@ -84,7 +84,7 @@ class DefaultBuilder(Builder):
         def make_layer(idx: int, nodes: int, prev_node: int|None, activation: ActivationFunction):
             ltype = layer_type(idx, len(layers))
             return Layer(nodes, prev_node,
-                    position=idx,
+                    idx=idx,
                     activation=activation,
                     max_layer_size=max_layer_size,
                     names=node_names(ltype),

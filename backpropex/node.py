@@ -59,9 +59,8 @@ class Node:
         self.position = position
         self.idx = math.floor(idx if idx >= 0 else position[1])
         self.layer = layer
-        self.name = name if name is not None else f'{layer.position}_{self.idx}'
-        self._edges_from = dict()
-        self._edges_to = dict()
+        self.name = name if name is not None else f'{layer.idx}_{self.idx}'
+
     @property
     def label(self) -> str:
         """The label for this node."""

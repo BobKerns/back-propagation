@@ -28,10 +28,9 @@ class Layer:
     layer_type: LayerType
 
     # The position of this layer in the network, with input = 0
-    position: int
+    idx: int
 
     # The activation function for nodes in this layer
-    # We record it here so we can display it in the graph
     activation: ActivationFunction
 
     _values: NPFloat1D
@@ -47,7 +46,7 @@ class Layer:
     weight_delta: NPFloat1D
 
     def __init__(self, nodes: int, prev_nodes: Optional[int] = None, /, *,
-                 position: int = 0,
+                 idx: int = 0,
                  activation: ActivationFunction=ACT_ReLU,
                  max_layer_size: int=10,
                  layer_type: LayerType=LayerType.Hidden,
@@ -64,7 +63,7 @@ class Layer:
         :param activation_function: The activation function for each node in this layer.
         :param max_layer_size: The maximum number of nodes in any layer, for centering the nodes.
         """
-        self.position = position
+        self.idx = idx
         offset = (max_layer_size - nodes) / 2
         self.layer_type = layer_type
         self.activation = activation
@@ -73,7 +72,7 @@ class Layer:
             case LayerType.Input | LayerType.Hidden:
                 offset = (max_layer_size - nodes) / 2
                 lsize = nodes + 1
-                lnames = [f'Bias_{position}', *(names or ((None,)* nodes))]
+                lnames = [f'Bias_{idx}', *(names or ((None,)* nodes))]
             case LayerType.Output:
                 offset = (max_layer_size - nodes + 2) / 2
                 lsize = nodes
@@ -81,10 +80,10 @@ class Layer:
         def node(idx: int = 0, is_bias: bool = False, **kwargs: Any):
             """Construct a suitable node for this layer."""
             position = next(positions)
-            pos = (float(self.position), position + offset)
+            pos = (float(self.idx), position + offset)
             if (is_bias):
                 return Bias(pos, layer=self)
-            name = None if names is None else lnames[idx] or f'{self.position}_{idx}'
+            name = None if names is None else lnames[idx] or f'{self.idx}_{idx}'
             match idx, layer_type:
                 case 0, LayerType.Input|LayerType.Hidden:
                     self.bias = Bias(pos, layer=self, idx=idx, name=name, **kwargs)

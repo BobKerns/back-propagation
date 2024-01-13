@@ -288,12 +288,12 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                     match step.type:
                         case StepType.TrainBackward:
                             llayer: Layer = cast(LayerStepResult[Any], step).layer
-                            if layer.position >= llayer.position:
+                            if layer.idx >= llayer.idx:
                                 partial = llayer.gradient[edge.to_.idx]
                                 label = f'{label}\n{partial:.2f}'
                         case StepType.TrainOptimize:
                             llayer: Layer = cast(LayerStepResult[Any], step).layer
-                            if layer.position == llayer.position:
+                            if layer.idx == llayer.idx:
                                 delta = llayer.weight_delta[edge.to_.idx]
                                 # Show the change just on the current layer
                                 label = f'{edge.weight-delta:.2f}\n{delta:.2f}'
@@ -370,7 +370,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
          Highlight the active layer, if there is one.
          """
          if self.net.active_layer is not None:
-            expcol = self.net.active_layer.position * self.xscale + layer_x_offset
+            expcol = self.net.active_layer.idx * self.xscale + layer_x_offset
             self.draw_highlight(ax, expcol)
 
     def _draw_expected(self, ax: Axes, result: TrainStepResultAny):

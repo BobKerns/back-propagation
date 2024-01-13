@@ -2,8 +2,9 @@
 An edge in the network, with weights
 """
 
-from backpropex.node import Node
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from backpropex.node import Node
 
 class Edge:
     """
@@ -14,9 +15,9 @@ class Edge:
     The weight is used to calculate a gradient for a weight with respect to the cost function.
     """
     # The weight of this edge.
-    from_: Node
-    to_: Node
-    def __init__(self, from_: Node, to_: Node, /, *,
+    from_: 'Node'
+    to_: 'Node'
+    def __init__(self, from_: 'Node', to_: 'Node', /, *,
                  initial_weight: float=0.0):
         self.from_ = from_
         self.to_ = to_

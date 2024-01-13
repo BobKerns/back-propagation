@@ -22,8 +22,11 @@ from backpropex.types import NPFloat1D
 from backpropex.activation import ACT_Identity, ACT_ReLU, ACT_Sigmoid, ActivationFunction
 if TYPE_CHECKING:
     from backpropex.layer import Layer
-    from backpropex.edge import Edge
+from backpropex.edge import Edge
 
+def null_generator[T](t: type[T]) -> Generator[T, None, None]:
+    """A generator that does nothing."""
+    return (cast(T, e) for e in ())
 
 class Node:
     """

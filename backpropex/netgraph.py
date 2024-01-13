@@ -324,7 +324,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
         Label the layers at the bottom of the graph.
         """
         def row_start(layer: Layer, offset: float = 0.0) -> float:
-            return (layer.position + layer_label_x_offset + offset) * self.xscale + layer_x_offset
+            return (layer.idx + layer_label_x_offset + offset) * self.xscale + layer_x_offset
         for layer in self.net.layers:
             xypos = (
                 row_start(layer),

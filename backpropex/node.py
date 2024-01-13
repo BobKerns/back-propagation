@@ -121,7 +121,7 @@ class Hidden(Node):
         super().__init__(position, **kwargs)
 
     def __repr__(self) -> str:
-        return f'Hidden[{self.layer.position},{self.idx}]={self.value:.2f}'
+        return f'Hidden[{self.layer.idx},{self.idx}]={self.value:.2f}'
 
 class Output(Node):
     """

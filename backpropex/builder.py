@@ -62,12 +62,12 @@ class DefaultBuilder(Builder):
             """
             len_f = len(from_.nodes)
             len_t = len(to_.nodes)
-            from_.edges_out = np.ndarray((len_f, len_t), dtype=object)
-            from_.edges_in = from_.edges_out
+            from_.edges_from = np.ndarray((len_f, len_t), dtype=object)
+            from_.edges_to = from_.edges_from
             for from_node in from_.nodes:
                 for to_node in to_.real_nodes:
                     edge = Edge(from_node, to_node)
-                    from_.edges_out[from_node.idx, to_node.idx] = edge
+                    from_.edges_from[from_node.idx, to_node.idx] = edge
                     net.add_edge(edge)
 
         def node_names(ltype: LayerType):

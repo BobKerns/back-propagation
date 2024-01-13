@@ -15,7 +15,7 @@ Nodes are differentiated by layer type:
   and are displayed differently.
 """
 
-from typing import Any, Generator, Optional, TYPE_CHECKING
+from typing import Any, Generator, Optional, TYPE_CHECKING, cast
 import math
 
 from backpropex.types import NPFloat1D
@@ -44,19 +44,6 @@ class Node:
 
     loss: float = 0.0
     gradient: Optional[NPFloat1D] = None
-
-    _edges_from: dict['Node', 'Edge']
-    _edges_to: dict['Node', 'Edge']
-
-    def addFrom(self, edge: 'Edge'):
-        if self._edges_from.get(edge.to_, None) is not None:
-            raise ValueError(f'Edge {edge} already exists from {self} to {edge.to_}')
-        self._edges_from[edge.to_] = edge
-
-    def addTo(self, edge: 'Edge'):
-        if self._edges_to.get(edge.from_, None) is not None:
-            raise ValueError(f'Edge {edge} already exists from {edge.from_} to {self}')
-        self._edges_to[edge.from_] = edge
 
     @property
     def is_bias(self) -> bool:
@@ -99,11 +86,17 @@ class Node:
     @property
     def edges_from(self) -> Generator['Edge', None, None]:
         """The edges from this node."""
-        yield from self._edges_from.values()
+        if hasattr(self.layer, 'edges_from'):
+            return (cast('Edge', e) for e in self.layer.edges_from[self.idx, :] if e is not None)
+        return null_generator(Edge)
 
     @property
     def edges_to(self) -> Generator['Edge', None, None]:
         """The edges to this node."""
+        if hasattr(self.layer, 'edges_to'):
+            return (cast('Edge', e) for e in self.layer.edges_to[self.idx, :] if e is not None)
+        return null_generator(Edge)
+
     @property
     def activation(self) -> ActivationFunction:
         """The activation function for this node."""

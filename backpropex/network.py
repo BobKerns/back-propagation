@@ -336,8 +336,7 @@ class Network(NetProtocol):
             """
             from_ = edge.from_
             to_ = edge.to_
-            from_.addFrom(edge)
-            to_.addTo(edge)    # type: ignore
+            from_.layer.edges_from[from_.idx, to_.idx] = edge
         def add_edges(self, edges: Iterable[Edge], /):
             """
             Add edges to the network.

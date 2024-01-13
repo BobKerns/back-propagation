@@ -11,12 +11,12 @@ from typing import NamedTuple, Protocol, TypedDict
 
 import numpy as np
 
-# include np.int_ in NPFloats to allow for integer inputs
-type NPFloat1D = np.ndarray[int, np.dtype[np.float_]]
+# include np.int_ in FloatSeq to allow for integer inputs
 type FloatSeq = Sequence[float|int]|tuple[float|int]|NPFloat1D
+type NPFloat1D = np.ndarray[int, np.dtype[np.float_]]
 type NPFloat2D = np.ndarray[tuple[int, int], np.dtype[np.float_]]
-type NPObject1D = np.ndarray[int, np.dtype[np.object_]]
-type NPObject2D = np.ndarray[tuple[int, int], np.dtype[np.object_]]
+type NPObject1D = np.ndarray[int,np.dtype[np.generic]]
+type NPObject2D = np.ndarray[tuple[int, int], np.dtype[np.generic]]
 
 type RGBA = tuple[float, float, float, float]
 
@@ -25,7 +25,6 @@ class NetTuple(Protocol):
     """Constructor for input or output named tuples"""
     def __call__(self, *args: float) -> tuple[float, ...]:
         ...
-
 
 class TrainingItem(NamedTuple):
     """

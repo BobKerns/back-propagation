@@ -20,8 +20,8 @@ class Layer:
     # Nodes in this layer
     nodes: Sequence[Node]
 
-    edges_in: NPObject2D
-    edges_out: NPObject2D
+    edges_to: NPObject2D
+    edges_from: NPObject2D
     # Bias node for this layer (always the first node)
     bias: Node
 

@@ -4,7 +4,7 @@ A module to perform gradient descent on a neural network.
 
 from typing import Any, Generator, Optional
 from backpropex.steps import StepType, TrainOptimizeStepResult
-from backpropex.types import TrainingInfo
+from backpropex.types import TrainingProgress
 from backpropex.protocols import NetProtocol, OptimizerProtocol
 
 class GradientDescent(OptimizerProtocol):
@@ -20,7 +20,7 @@ class GradientDescent(OptimizerProtocol):
         self.learning_rate = learning_rate
 
     def __call__(self, net: NetProtocol, loss: float, /, *,
-                 training_info: TrainingInfo,
+                 training_info: TrainingProgress,
                  learning_rate: Optional[float] = 0.1,
                  **kwargs: Any) -> Generator[TrainOptimizeStepResult, Any, None]:
         """
@@ -30,7 +30,7 @@ class GradientDescent(OptimizerProtocol):
         :param info: Information about the training step.
         """
         if learning_rate is not None:
-            ... 
+            ...
         output = net.output_layer
         output.loss.fill(loss/len(output.loss))
         for from_layer, to_layer in zip(reversed(net.layers[0:-1]),

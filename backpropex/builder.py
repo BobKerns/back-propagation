@@ -11,10 +11,10 @@ from backpropex.activation import ACT_ReLU, ACT_Sigmoid
 from backpropex.edge import Edge
 from backpropex.layer import Layer
 from backpropex.protocols import (
-    ActivationFunction, Builder, BuilderContext, Randomizer,\
-    )
-from backpropex.randomizer import HeEtAl
+    ActivationFunction, Builder, BuilderContext
+)
 from backpropex.types import LayerType
+
 
 # We are all set up, so let's define our input and output.
 def sanitize(name: str) -> str:
@@ -31,7 +31,6 @@ class DefaultBuilder(Builder):
                  activations: Optional[Sequence[ActivationFunction]]=None,
                  input_names: Optional[Sequence[str]]=None,
                  output_names: Optional[Sequence[str]]=None,
-                 randomizer: Randomizer = HeEtAl(),
                  **kwargs: Any) -> None:
         """
         Construct a neural network from a specification.
@@ -90,7 +89,6 @@ class DefaultBuilder(Builder):
                     max_layer_size=max_layer_size,
                     names=node_names(ltype),
                     layer_type=ltype,
-                    randomizer=randomizer,
                     **kwargs)
 
         net.add_layers(

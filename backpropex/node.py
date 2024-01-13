@@ -19,7 +19,7 @@ from typing import Any, Generator, Optional, TYPE_CHECKING
 import math
 
 from backpropex.types import NPFloat1D
-from backpropex.activation import ACT_Identity, ACT_ReLU, ACT_Sigmoid, ActivationFunction
+from backpropex.activation import ACT_Identity, ActivationFunction
 if TYPE_CHECKING:
     from backpropex.layer import Layer
 from backpropex.edge import Edge
@@ -41,8 +41,6 @@ class Node:
     layer: 'Layer'
     # The name of this node. Primarily for output nodes.
     name: Optional[str]
-
-    activation: ActivationFunction
 
     loss: float = 0.0
     gradient: Optional[NPFloat1D] = None
@@ -69,7 +67,7 @@ class Node:
                  idx: int=-1,
                  layer: 'Layer',
                  name: Optional[str]=None,
-                 activation: ActivationFunction=ACT_ReLU,
+                 **kwargs: Any
                  ):
         self.position = position
         self.idx = math.floor(idx if idx >= 0 else position[1])
@@ -77,8 +75,6 @@ class Node:
         self.name = name if name is not None else f'{layer.position}_{self.idx}'
         self._edges_from = dict()
         self._edges_to = dict()
-        self.activation = activation
-
     @property
     def label(self) -> str:
         """The label for this node."""
@@ -108,17 +104,19 @@ class Node:
     @property
     def edges_to(self) -> Generator['Edge', None, None]:
         """The edges to this node."""
-        yield from self._edges_to.values()
+    @property
+    def activation(self) -> ActivationFunction:
+        """The activation function for this node."""
+        return self.layer.activation
+
 
 class Input(Node):
     """
     An input node in the network.
     """
-    def __init__(self, position: tuple[float, float], /, *,
-                activation: ActivationFunction=ACT_Identity,
+    def __init__(self, position: tuple[float, float], /,
                  **kwargs: Any):
         super().__init__(position,
-                         activation=activation,
                          **kwargs)
 
     def __repr__(self) -> str:
@@ -141,12 +139,10 @@ class Output(Node):
     """
 
     def __init__(self, position: tuple[float, float], /, *,
-                 activation: ActivationFunction=ACT_Sigmoid,
                  name: Optional[str] = None,
                 **kwargs: Any
                  ):
         super().__init__(position,
-                        activation=activation,
                          **kwargs)
         self.name = name
 
@@ -161,7 +157,6 @@ class Bias(Node):
     """
     def __init__(self, position: tuple[float, float], /, **kwargs: Any):
         super().__init__(position,
-                         activation=ACT_Identity,
                          **kwargs)
     @property
     def is_bias(self) -> bool:
@@ -182,6 +177,11 @@ class Bias(Node):
     def label(self) -> str:
         """The label for this node."""
         return "1"
+
+    @property
+    def activation(self) -> ActivationFunction:
+        """The activation function for this node."""
+        return ACT_Identity
 
     def __repr__(self):
         return "<1>"

@@ -14,7 +14,6 @@ class Edge:
     The weight is used to calculate a gradient for a weight with respect to the cost function.
     """
     # The weight of this edge.
-    weight: float
     from_: Node
     to_: Node
     def __init__(self, from_: Node, to_: Node, /, *,
@@ -23,11 +22,20 @@ class Edge:
         self.to_ = to_
         self.weight = initial_weight
 
+
+    @property
+    def weight(self) -> float:
+        return self.to_.layer.weights[self.from_.idx, self.to_.idx]
+
+    @weight.setter
+    def weight(self, value: float):
+        self.to_.layer.weights[self.from_.idx, self.to_.idx] = value
+
     @property
     def label(self):
         return f'{self.weight:.2f}'
 
     def __repr__(self):
-        return f'Edge({self.from_} -> {self.to_})'
+        return f'Edge({self.from_} -> {self.to_})={self.weight:.2f}'
 
 __all__ = ['Edge']

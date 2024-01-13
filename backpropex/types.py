@@ -15,6 +15,8 @@ import numpy as np
 type NPFloat1D = np.ndarray[int, np.dtype[np.float_]]
 type FloatSeq = Sequence[float|int]|tuple[float|int]|NPFloat1D
 type NPFloat2D = np.ndarray[tuple[int, int], np.dtype[np.float_]]
+type NPObject1D = np.ndarray[int, np.dtype[np.object_]]
+type NPObject2D = np.ndarray[tuple[int, int], np.dtype[np.object_]]
 
 type RGBA = tuple[float, float, float, float]
 
@@ -55,6 +57,7 @@ class LayerType(StrEnum):
 
 __all__ = [
     'NPFloat1D', 'FloatSeq', 'NPFloat2D', 'RGBA', 'Point',
+    'NPObject1D', 'NPObject2D',
     'TrainingDatum', 'TrainingData',
     'LayerType',
     'NetTuple', 'TrainingInfo', 'TrainingItem', 'TrainingSet',

@@ -33,6 +33,7 @@ class Node:
     _value: float = 0.0
     # The graphical logical position of this node in the network.
     position: tuple[float, float]
+    id: int
     idx: int
     layer: 'Layer'
     # The name of this node. Primarily for output nodes.
@@ -83,7 +84,7 @@ class Node:
     @property
     def value(self) -> float:
         """The value of this node."""
-        return self._value
+        return self.layer.value(self.idx)
 
     @value.setter
     def value(self, value: float):

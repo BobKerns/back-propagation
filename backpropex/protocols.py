@@ -25,7 +25,7 @@ from typing import (
 )
 
 from backpropex.types import (
-    FloatSeq, NPFloat2D, NPFloat1D, TrainingData, TrainingInfo, TrainingItem
+    FloatSeq, NPFloat2D, NPFloat1D, NPObject2D, TrainingData, TrainingInfo, TrainingItem
 )
 from backpropex.steps import (
     EvalStepResultAny,
@@ -68,6 +68,7 @@ class NetProtocol(EvalProtocol, Protocol):
     """
     net: 'NetProtocol'
     layers: list['Layer']
+    edges_: NPObject2D
     max_layer_size: int
     name: str
 

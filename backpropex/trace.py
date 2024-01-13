@@ -39,7 +39,6 @@ class BaseTrace(Trace):
                  **kwargs: Any) -> None:
         ...
 
-
 class PrintTrace(BaseTrace):
     """
     A trace that prints the results.

@@ -5,12 +5,15 @@ A builder constructs a neural network from a specification.
 from typing import Any, Optional, Sequence
 import re
 
+import numpy as np
+
 from backpropex.activation import ACT_ReLU, ACT_Sigmoid
 from backpropex.edge import Edge
 from backpropex.layer import Layer
 from backpropex.protocols import (
-    ActivationFunction, Builder, BuilderContext,\
+    ActivationFunction, Builder, BuilderContext, Randomizer,\
     )
+from backpropex.randomizer import HeEtAl
 from backpropex.types import LayerType
 
 # We are all set up, so let's define our input and output.
@@ -28,6 +31,7 @@ class DefaultBuilder(Builder):
                  activations: Optional[Sequence[ActivationFunction]]=None,
                  input_names: Optional[Sequence[str]]=None,
                  output_names: Optional[Sequence[str]]=None,
+                 randomizer: Randomizer = HeEtAl(),
                  **kwargs: Any) -> None:
         """
         Construct a neural network from a specification.
@@ -57,9 +61,14 @@ class DefaultBuilder(Builder):
             """
             Connect two layers in the network.
             """
+            len_f = len(from_.nodes)
+            len_t = len(to_.nodes)
+            from_.edges_out = np.ndarray((len_f, len_t), dtype=object)
+            from_.edges_in = from_.edges_out
             for from_node in from_.nodes:
                 for to_node in to_.real_nodes:
                     edge = Edge(from_node, to_node)
+                    from_.edges_out[from_node.idx, to_node.idx] = edge
                     net.add_edge(edge)
 
         def node_names(ltype: LayerType):
@@ -73,19 +82,21 @@ class DefaultBuilder(Builder):
                 return output_names
             return None
 
-        def make_layer(idx: int, nodes: int, activation: ActivationFunction):
+        def make_layer(idx: int, nodes: int, prev_node: int|None, activation: ActivationFunction):
             ltype = layer_type(idx, len(layers))
-            return Layer(nodes,
+            return Layer(nodes, prev_node,
                     position=idx,
                     activation=activation,
                     max_layer_size=max_layer_size,
                     names=node_names(ltype),
-                    layer_type=ltype)
+                    layer_type=ltype,
+                    randomizer=randomizer,
+                    **kwargs)
 
         net.add_layers(
-            make_layer(idx, nodes, activation)
-            for nodes, activation, idx
-            in zip(layers, activations, range(len(layers)))
+            make_layer(idx, nodes, prev_nodes, activation)
+            for nodes, prev_nodes, activation, idx
+            in zip(layers, (None,) + layers[:-1], activations, range(len(layers)))
         )
         # Label the layers
         net.layers[0].label = 'Input'

@@ -43,7 +43,7 @@ from backpropex.steps import (
     EvalForwardStepResult, EvalInputStepResult,
 )
 from backpropex.types import (
-    FloatSeq, LayerType, NetTuple,
+    FloatSeq, LayerType, NPObject2D, NetTuple,
 )
 from backpropex.protocols import (
     Builder, BuilderContext, NetProtocol, Filter, Randomizer,
@@ -65,6 +65,8 @@ class Network(NetProtocol):
     layers: list[Layer]
     max_layer_size: int
     name: str
+
+    edges_: NPObject2D
 
     _filter: Optional[Filter] = None
     _trace: Optional[Trace] = None
@@ -117,6 +119,15 @@ class Network(NetProtocol):
                     edge.weight = w[pidx][nidx]
 
         self.max_layer_size = max(len(layer) for layer in self.layers)
+        maxid = 0
+        for id, node in enumerate(self.nodes):
+            node.id = id
+            maxid = id
+        # O(n^2) for now, to make it easy to visualize global connectivity.
+        self.edges_ = np.ndarray((maxid+1, maxid+1),dtype=object)
+        for node in self.nodes:
+            for edge in node.edges_to:
+                self.edges_[edge.from_.id, edge.to_.id] = edge
         self.input_type = self.mk_namedtuple('input', self.input_layer)
         self.output_type = self.mk_namedtuple('output', self.output_layer)
 

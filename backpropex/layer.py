@@ -6,8 +6,10 @@ from collections.abc import Sequence
 from typing import Any, Optional
 
 import numpy as np
+from backpropex.protocols import Randomizer
+from backpropex.randomizer import HeEtAl
 
-from backpropex.types import FloatSeq, LayerType, NPFloat1D
+from backpropex.types import FloatSeq, LayerType, NPFloat1D, NPFloat2D, NPObject2D
 from backpropex.activation import ACT_Identity, ACT_ReLU, ActivationFunction
 from backpropex.node import Bias, Hidden, Input, Node, Output
 
@@ -17,6 +19,9 @@ class Layer:
     label: str
     # Nodes in this layer
     nodes: Sequence[Node]
+
+    edges_in: NPObject2D
+    edges_out: NPObject2D
     # Bias node for this layer (always the first node)
     bias: Node
 
@@ -29,6 +34,10 @@ class Layer:
     # We record it here so we can display it in the graph
     activation: ActivationFunction
 
+    _values: NPFloat1D
+
+    weights: NPFloat2D
+
     gradient: NPFloat1D
 
     loss: NPFloat1D
@@ -37,12 +46,13 @@ class Layer:
 
     weight_delta: NPFloat1D
 
-    def __init__(self, nodes: int, /, *,
+    def __init__(self, nodes: int, prev_nodes: Optional[int] = None, /, *,
                  position: int = 0,
                  activation: ActivationFunction=ACT_ReLU,
                  max_layer_size: int=10,
                  layer_type: LayerType=LayerType.Hidden,
                  names: Optional[Sequence[str]]=None,
+                 randomizer: Randomizer = HeEtAl(),
                  ):
         """
         A set of nodes constituting one layer in a neural network.
@@ -50,6 +60,7 @@ class Layer:
         In addition to the specified number of nodes, a bias node is added to the layer.
 
         :param nodes: The number of nodes in this layer.
+        :param prev_nodes: The number of nodes in the previous layer, if any
         :param activation_function: The activation function for each node in this layer.
         :param max_layer_size: The maximum number of nodes in any layer, for centering the nodes.
         """
@@ -84,11 +95,15 @@ class Layer:
                     return Output(pos, layer=self, idx=idx, activation=activation, name=name, **kwargs)
                 case _, LayerType.Hidden:
                     return Hidden(pos, layer=self, idx=idx, activation=activation, name=name, **kwargs)
+        self._values = np.zeros(lsize, np.float_)
+        if prev_nodes is not None:
+            self.weights = randomizer((prev_nodes + 1, lsize))
+            self.weights[:, 0] = 0.0 # No incoming weights to the bias node
         self.nodes = [node(idx) for idx in range(lsize)]
         self.gradient = np.zeros(len(self.nodes), np.float_)
         self.loss = np.zeros(len(self.nodes), np.float_)
         self.loss_delta = np.zeros(len(self.nodes), np.float_)
-        self.weight_delta = np.zeros(len(self.nodes), np.float_)    
+        self.weight_delta = np.zeros(len(self.nodes), np.float_)
 
     @property
     def real_nodes(self):
@@ -100,12 +115,25 @@ class Layer:
 
     @property
     def values(self):
-        return (n.value for n in self.real_nodes)
+        """The values of the nodes in this layer."""
+        match self.layer_type:
+            case LayerType.Input | LayerType.Hidden:
+                return self._values[1:]
+            case LayerType.Output:
+                return self._values
 
     @values.setter
     def values(self, values: FloatSeq):
-        for node, value in zip(self.real_nodes, values):
-            node.value = value
+        """ Set the values of the nodes in this layer."""
+        match self.layer_type:
+            case LayerType.Input | LayerType.Hidden:
+                self._values[1:] = values
+            case LayerType.Output:
+                self._values = np.array(values, dtype=np.float_)
+
+    def value(self, idx: int):
+        """Get the value of a node in this layer."""
+        return self._values[idx]
 
     def __getitem__(self, idx: int|str):
         """Get a node by index or name."""

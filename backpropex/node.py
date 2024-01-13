@@ -32,8 +32,6 @@ class Node:
     """
     One node in the network.
     """
-    # The value of this node.
-    _value: float = 0.0
     # The graphical logical position of this node in the network.
     position: tuple[float, float]
     id: int
@@ -74,7 +72,7 @@ class Node:
     @value.setter
     def value(self, value: float):
         """The value of this node."""
-        self._value = float(value)
+        return self.layer.set_value(self.idx, value)
 
     @property
     def edges(self) -> Generator['Edge', None, None]:

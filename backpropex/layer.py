@@ -134,6 +134,10 @@ class Layer:
         """Get the value of a node in this layer."""
         return self._values[idx]
 
+    def set_value(self, idx: int, value: float):
+        """Set the value of a node in this layer."""
+        self._values[idx] = value
+
     def __getitem__(self, idx: int|str):
         """Get a node by index or name."""
         if isinstance(idx, str):

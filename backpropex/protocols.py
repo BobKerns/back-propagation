@@ -25,7 +25,7 @@ from typing import (
 )
 
 from backpropex.types import (
-    FloatSeq, NPFloat2D, NPFloat1D, NPObject2D, TrainingData, TrainingInfo, TrainingItem
+    FloatSeq, NPFloat2D, NPFloat1D, NPObject2D, TrainingData, TrainingProgress, TrainingItem
 )
 from backpropex.steps import (
     EvalStepResultAny,
@@ -191,7 +191,7 @@ class BackpropagateProtocol(Protocol):
     A module to backpropagate the error gradient through the network.
     """
     def __call__(self, trainer: TrainProtocol, training_item: TrainingItem, /, *,
-                 training_info: TrainingInfo,
+                 training_info: TrainingProgress,
                  **kwargs: Any) -> Generator[TrainBackwardStepResult, Any, None]:
         """
         Backpropagate the gradient through the network.

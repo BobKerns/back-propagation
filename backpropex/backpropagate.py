@@ -1,16 +1,16 @@
 """
-Foo
+Backpropagate the gradient through the network.
 """
 
 from typing import Any, Generator
 from backpropex.protocols import BackpropagateProtocol, TrainProtocol
 from backpropex.steps import StepType, TrainBackwardStepResult
-from backpropex.types import TrainingInfo, TrainingItem
-
+from backpropex.types import TrainingProgress, TrainingItem
 
 class Backpropagate(BackpropagateProtocol):
+    """Backpropagate the gradient through the network."""
     def __call__(self, trainer: TrainProtocol, training_item: TrainingItem, /, *,
-                 training_info: TrainingInfo,
+                 training_info: TrainingProgress,
                  **kwargs: Any) -> Generator[TrainBackwardStepResult, Any, None]:
         """
         Backpropagate the gradient through the network.

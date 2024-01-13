@@ -23,7 +23,7 @@ from backpropex.steps import (
 )
 from backpropex.types import (
     NPFloat1D,
-    TrainingData, TrainingInfo, TrainingItem,
+    TrainingData, TrainingProgress, TrainingItem,
 )
 from backpropex.protocols import (
     BackpropagateProtocol, Filter, NetProtocol, OptimizerProtocol, TrainProtocol, Trace,
@@ -172,7 +172,7 @@ class Trainer(TrainProtocol):
         input = np.array(datum.input)
         expected = np.array(datum.expected)
         with self.training_datum(datum_number, datum_max, datum):
-            training_info: TrainingInfo = TrainingInfo(epoch=self.epoch_number or 0,
+            training_info: TrainingProgress = TrainingProgress(epoch=self.epoch_number or 0,
                                          epoch_max=self.epoch_max,
                                          datum_no=datum_number,
                                          datum_max=datum_max,

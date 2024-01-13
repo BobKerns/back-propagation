@@ -41,12 +41,14 @@ type TrainingSet=list[TrainingItem]
 type TrainingDatum = tuple[FloatSeq, FloatSeq]
 type TrainingData = Iterable[TrainingDatum]
 
-class TrainingInfo(TypedDict):
+class TrainingProgress(TypedDict):
+    """Information about the ongoing training process. """
     epoch: int
     epoch_max: int
     datum_no: int
     datum_max: int
     datum: TrainingItem
+
 class LayerType(StrEnum):
     """
     The type of a layer in a neural network.
@@ -60,5 +62,5 @@ __all__ = [
     'NPObject1D', 'NPObject2D',
     'TrainingDatum', 'TrainingData',
     'LayerType',
-    'NetTuple', 'TrainingInfo', 'TrainingItem', 'TrainingSet',
+    'NetTuple', 'TrainingProgress', 'TrainingItem', 'TrainingSet',
 ]

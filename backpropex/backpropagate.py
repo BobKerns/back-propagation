@@ -10,7 +10,7 @@ from backpropex.types import TrainingProgress, TrainingItem
 class Backpropagate(BackpropagateProtocol):
     """Backpropagate the gradient through the network."""
     def __call__(self, trainer: TrainProtocol, training_item: TrainingItem, /, *,
-                 training_info: TrainingProgress,
+                 training_progress: TrainingProgress,
                  **kwargs: Any) -> Generator[TrainBackwardStepResult, Any, None]:
         """
         Backpropagate the gradient through the network.
@@ -34,5 +34,5 @@ class Backpropagate(BackpropagateProtocol):
                 yield TrainBackwardStepResult(StepType.TrainBackward,
                                             layer=to_layer,
                                             gradient=to_gradient,
-                                            **training_info
+                                            **training_progress
                                             )

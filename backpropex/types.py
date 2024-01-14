@@ -40,12 +40,17 @@ type TrainingSet=list[TrainingItem]
 type TrainingDatum = tuple[FloatSeq, FloatSeq]
 type TrainingData = Iterable[TrainingDatum]
 
+null_training_item: TrainingItem = TrainingItem(
+    input=np.array([], np.float_),
+    expected=np.array([], np.float_),
+    id=-1)
 class TrainingProgress(TypedDict):
     """Information about the ongoing training process. """
     epoch: int
     epoch_max: int
     datum_no: int
     datum_max: int
+    output_loss: float
     datum: TrainingItem
 
 class LayerType(StrEnum):
@@ -61,5 +66,5 @@ __all__ = [
     'NPObject1D', 'NPObject2D',
     'TrainingDatum', 'TrainingData',
     'LayerType',
-    'NetTuple', 'TrainingProgress', 'TrainingItem', 'TrainingSet',
+    'NetTuple', 'TrainingProgress', 'TrainingItem', 'null_training_item', 'TrainingSet',
 ]

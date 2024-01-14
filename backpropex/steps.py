@@ -98,6 +98,7 @@ class TrainStepResult[T: TrainStepType](LayerStepResult[T]):
     epoch_max: int
     datum_no: int
     datum_max: int
+    output_loss: float
     datum: TrainingItem
 
 # Concrete step results

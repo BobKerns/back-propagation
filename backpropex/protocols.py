@@ -191,7 +191,7 @@ class BackpropagateProtocol(Protocol):
     A module to backpropagate the error gradient through the network.
     """
     def __call__(self, trainer: TrainProtocol, training_item: TrainingItem, /, *,
-                 training_info: TrainingProgress,
+                 training_progress: TrainingProgress,
                  **kwargs: Any) -> Generator[TrainBackwardStepResult, Any, None]:
         """
         Backpropagate the gradient through the network.
@@ -206,6 +206,7 @@ class OptimizerProtocol(Protocol):
     def __call__(self, net: NetProtocol, loss: float, /, *,
                  epochs: int=1000,
                  learning_rate: float=0.1,
+                 training_progress: TrainingProgress,
                  **kwargs: Any
                  ) -> Generator[TrainOptimizeStepResult, Any, None]:
         ...

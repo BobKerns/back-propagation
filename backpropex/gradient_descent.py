@@ -20,7 +20,7 @@ class GradientDescent(OptimizerProtocol):
         self.learning_rate = learning_rate
 
     def __call__(self, net: NetProtocol, loss: float, /, *,
-                 training_info: TrainingProgress,
+                 training_progress: TrainingProgress,
                  learning_rate: Optional[float] = 0.1,
                  **kwargs: Any) -> Generator[TrainOptimizeStepResult, Any, None]:
         """
@@ -56,5 +56,5 @@ class GradientDescent(OptimizerProtocol):
                                          layer=to_layer,
                                             loss = loss * to_layer.gradient * self.learning_rate,
                                             weight_delta = to_layer.gradient * self.learning_rate,
-                                            **training_info
+                                            **training_progress
                                             )

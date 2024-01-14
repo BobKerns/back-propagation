@@ -24,6 +24,7 @@ from backpropex.steps import (
 from backpropex.types import (
     NPFloat1D,
     TrainingData, TrainingProgress, TrainingItem,
+    null_training_item,
 )
 from backpropex.protocols import (
     BackpropagateProtocol, Filter, NetProtocol, OptimizerProtocol, TrainProtocol, Trace,
@@ -37,16 +38,7 @@ class Trainer(TrainProtocol):
     learning_rate: float
     loss_function: LossFunction
 
-    # The item within the training set currently being trained
-    datum_number: Optional[int] = None
-    datum_max: int = 0
-    datum: Optional[TrainingItem] = None
-    # The epoch currently being trained (pass through the training set))
-    epoch_number: Optional[int] = None
-    # The number of epochs to train
-    epoch_max: int = 0
-    # The loss for the current training item.
-    loss: Optional[float] = None
+    training_progress: TrainingProgress
 
     _filter: Optional[Filter|type[Filter]] = None
     _trace: Optional[Trace|type[Trace]] = None
@@ -77,6 +69,11 @@ class Trainer(TrainProtocol):
             self._filter = make(filter, Filter)
         if trace is not None:
             self._trace = make(trace, Trace)
+        self.training_progress = TrainingProgress(
+            epoch=0, epoch_max=0, datum_no=0, datum_max=0,
+            output_loss=0.0,
+            datum=null_training_item
+        )
 
     def __call__(self, data: TrainingData, /, *,
                     epochs: int=1, batch_size: int=1,
@@ -129,11 +126,10 @@ class Trainer(TrainProtocol):
         """
         Set the active layer for the network during a training pass.
         """
-        self.epoch_number = epoch
-        self.epoch_max = epoch_max
-        yield epoch
-        self.epoch_number = None
-        self.epoch_max = 0
+        tp = self.training_progress
+        tp['epoch'] = epoch
+        tp['epoch_max'] = epoch_max
+        yield tp
 
     @contextmanager
     def training_datum(self, datum_number: int, datum_max: int,
@@ -141,14 +137,11 @@ class Trainer(TrainProtocol):
         """
         Set the active layer for the network during a training pass.
         """
-        self.datum_number = datum_number
-        self.datum_max = datum_max
-        self.datum = datum
-        yield datum_number, datum_max, datum
-        self.datum_number = None
-        self.datum_max = 0
-        self.datum = None
-        self.datum_expected = None
+        tp = self.training_progress
+        tp['datum_no'] = datum_number
+        tp['datum_max'] = datum_max
+        tp['datum'] = datum
+        yield self.training_progress
 
     @contextmanager
     def training_loss(self,  output: NPFloat1D, expected: NPFloat1D, /):
@@ -156,9 +149,8 @@ class Trainer(TrainProtocol):
         Set the loss for the network during a training pass.
         """
         loss = self.loss_function(output, expected)
-        self.loss = loss
+        self.training_progress['output_loss'] = loss
         yield loss
-        self.loss = None
 
 
     def train_one(self, datum: TrainingItem, /, *,
@@ -171,12 +163,7 @@ class Trainer(TrainProtocol):
         """
         input = np.array(datum.input)
         expected = np.array(datum.expected)
-        with self.training_datum(datum_number, datum_max, datum):
-            training_info: TrainingProgress = TrainingProgress(epoch=self.epoch_number or 0,
-                                         epoch_max=self.epoch_max,
-                                         datum_no=datum_number,
-                                         datum_max=datum_max,
-                                         datum=datum)
+        with self.training_datum(datum_number, datum_max, datum) as training_progress:
             # Forward pass
             def map_step(step: EvalStepResultAny):
                 """Extemd the eval step with training info."""
@@ -185,16 +172,16 @@ class Trainer(TrainProtocol):
                         return TrainInputStepResult(StepType.TrainInput,
                                                     layer=step.layer,
                                                     input=step.input,
-                                                    **training_info)
+                                                    **training_progress)
                     case EvalForwardStepResult():
                         return TrainForwardStepResult(StepType.TrainForward,
                                                     layer=step.layer,
-                                                    **training_info)
+                                                    **training_progress)
                     case EvalOutputStepResult():
                         return TrainOutputStepResult(StepType.TrainOutput,
                                                     layer=step.layer,
                                                     output=step.output,
-                                                    **training_info)
+                                                    **training_progress)
                     case InitStepResult():
                         return step
             def map_step_type(type: StepTypeAny) -> TrainStepType:
@@ -220,10 +207,10 @@ class Trainer(TrainProtocol):
             output = self.net.output_array
             loss = self.loss_function(output, expected)
             with self.training_loss(output, expected) as loss:
-                yield TrainLossStepResult(StepType.TrainLoss, layer=layer, loss=loss, **training_info)
+                yield TrainLossStepResult(StepType.TrainLoss, layer=layer, loss=loss, **training_progress)
                 yield from self.backpropagate(self, datum,
-                                              training_info=training_info,
+                                              training_progress=training_progress,
                                               **kwargs)
                 yield from self.optimize(self.net, loss,
-                                         training_info=training_info,
+                                         training_progress=training_progress,
                                          **kwargs)

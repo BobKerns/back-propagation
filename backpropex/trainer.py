@@ -197,12 +197,9 @@ class Trainer(TrainProtocol):
                         return StepType.Initialized
                     case _:
                         raise ValueError(f'Unexpected step type {type}')
-            def checkStep(step: EvalStepResultAny) -> TrainStepResultAny|None:
-                """Check the step type."""
-                with self.net.filterCheck(map_step_type(step.type), lambda: map_step(step)) as f:
-                    return f
-            yield from (s for s in (checkStep(r) for r in self.net(input)) if s is not None)
-            # Backward pass
+            for step in self.net(input):
+                yield from self.net.filterCheck(map_step_type(step.type), lambda: map_step(step))
+            # Backward s
             layer = self.net.layers[-1]
             output = self.net.output_array
             loss = self.loss_function(output, expected)

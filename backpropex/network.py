@@ -135,11 +135,9 @@ class Network(NetProtocol):
         self.input_type = self.mk_namedtuple('input', self.input_layer)
         self.output_type = self.mk_namedtuple('output', self.output_layer)
 
-    @contextmanager
-    def filterCheck[R: StepResultAny](
-        self, type: StepType,
+    def filterCheck[R: StepResultAny](self, type: StepType,
         mk_result: Callable[[], R],
-    /) -> Generator[R|None, Any, None]:
+    /) -> Generator[R, Any, None]:
         """
         Check if the filter allows the step to proceed.
         """
@@ -159,10 +157,6 @@ class Network(NetProtocol):
             if self._filter(type, None):
                 if self._filter(type, mk_result_cached()):
                     yield mk_result_cached()
-                else:
-                    yield None
-            else:
-                yield None
             if self._filter(type, False):
                 raise StopIteration
         else:
@@ -244,20 +238,16 @@ class Network(NetProtocol):
         with self.trace(trace):
             with self.filter(filter):
                 with self.filter(self._filter):
-                    with self.filterCheck(StepType.Initialized,
-                                    lambda : InitStepResult(StepType.Initialized)) as step:
-                        if step:
-                            yield step
+                    yield from self.filterCheck(StepType.Initialized,
+                                    lambda : InitStepResult(StepType.Initialized))
                     layer = self.layers[0]
                     layer.values = input
                     with self.step_active(layer):
                         in_tuple = self.input_type(*input)
-                        with self.filterCheck(StepType.Input,
+                        yield from self.filterCheck(StepType.Input,
                                         lambda : EvalInputStepResult(StepType.Input,
                                                                      layer=layer,
-                                                                     input=in_tuple)) as step:
-                            if step:
-                                yield step
+                                                                     input=in_tuple))
                     for layer in self.layers[1:]:
                         with self.step_active(layer):
                             for node in layer.real_nodes:
@@ -283,9 +273,7 @@ class Network(NetProtocol):
                                         return StepType.Output, mk_output
                                     case _:
                                         return StepType.Forward, mk_forward
-                            with self.filterCheck(*mk_step()) as step:
-                                if step:
-                                    yield step
+                            yield from self.filterCheck(*mk_step())
 
     # For use by the builder
     class Context(BuilderContext):

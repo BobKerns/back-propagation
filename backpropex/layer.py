@@ -31,7 +31,22 @@ class Layer:
     idx: int
 
     # The activation function for nodes in this layer
-    activation: ActivationFunction
+    _activation_fn: ActivationFunction
+    _activation_fn_ufunc: np.ufunc
+    _activation_fn_derivative: np.ufunc
+    @property
+    def activation_fn(self):
+        return self._activation_fn
+
+    @activation_fn.setter
+    def activation_fn(self, fn: ActivationFunction):
+        self._activation_fn = fn
+        self._activation_fn_ufunc = np.frompyfunc(fn, 1, 1)
+        self._activation_fn_derivative = np.frompyfunc(fn.derivative, 1, 1)
+
+    @property
+    def activation_fn_derivative(self):
+        return self._activation_fn_derivative
 
     _values: NPFloat1D
 
@@ -66,7 +81,7 @@ class Layer:
         self.idx = idx
         offset = (max_layer_size - nodes) / 2
         self.layer_type = layer_type
-        self.activation = activation
+        self.activation_fn = activation
         positions = iter(range(0, nodes + 1))
         match layer_type:
             case LayerType.Input | LayerType.Hidden:
@@ -112,6 +127,10 @@ class Layer:
             case LayerType.Output:
                 return self.nodes
 
+    def activation(self, values: NPFloat1D, /) -> NPFloat1D:
+        """The values of the activation function for the nodes in this layer."""
+        return self._activation_fn_ufunc(values)
+
     @property
     def values(self):
         """The values of the nodes in this layer."""
@@ -152,6 +171,6 @@ class Layer:
         return len(self.real_nodes)
 
     def __repr__(self):
-        return f'{self.layer_type} {self.activation.name}({len(self.nodes)})'
+        return f'{self.layer_type} {self.activation_fn.name}({len(self.nodes)})'
 
 __all__ = ['Layer']

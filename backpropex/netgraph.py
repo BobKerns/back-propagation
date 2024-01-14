@@ -342,7 +342,7 @@ class NetGraph(EvalProtocol, TrainProtocol, GraphProtocol):
                         )
         for layer in self.net.layers[1:]:
             xypos = (row_start(layer), layer_y2_offset)
-            ax.annotate(layer.activation.name, xypos, # type: ignore
+            ax.annotate(layer.activation_fn.name, xypos, # type: ignore
                         horizontalalignment='center',
                         verticalalignment='center',
                         )

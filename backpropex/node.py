@@ -91,7 +91,7 @@ class Node:
     @property
     def activation(self) -> ActivationFunction:
         """The activation function for this node."""
-        return self.layer.activation
+        return self.layer.activation_fn
 
 
 class Input(Node):

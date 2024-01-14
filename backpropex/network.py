@@ -23,7 +23,7 @@
 """
 
 from typing import (
-    Any, Callable, Generator, NamedTuple, Optional,
+    Any, Callable, Generator, NamedTuple, Optional, cast,
 )
 from collections.abc import Iterable
 from contextlib import contextmanager
@@ -54,6 +54,10 @@ from backpropex.layer import Layer
 from backpropex.node import Node
 from backpropex.filters import FilterChain
 from backpropex.utils import ids, make
+
+def null_generator[T](t: type[T]) -> Generator[T, None, None]:
+    """A generator that does nothing."""
+    return (cast(T, e) for e in ())
 
 class Network(NetProtocol):
     """
@@ -348,10 +352,15 @@ class Network(NetProtocol):
     def edges(self) -> Generator[Edge, None, None]:
         return (
             edge
-            for layer in self.net.layers
-            for node in layer.nodes
-            for edge in node.edges
+            for edge in (
+                layer.edges_from[i, j]
+                for layer in self.net.layers
+                if hasattr(layer, 'edges_from')
+                for i in range(layer.edges_from.shape[0])
+                for j in range(layer.edges_from.shape[1])
             )
+            if edge is not None
+        )
 
     @property
     def nodes(self) -> Generator[Node, None, None]:

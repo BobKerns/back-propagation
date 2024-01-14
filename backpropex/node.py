@@ -15,7 +15,8 @@ Nodes are differentiated by layer type:
   and are displayed differently.
 """
 
-from typing import Any, Generator, Optional, TYPE_CHECKING, cast
+from collections.abc import Sequence
+from typing import Any, Optional, TYPE_CHECKING, cast
 import math
 
 from backpropex.types import NPFloat1D
@@ -23,10 +24,6 @@ from backpropex.activation import ACT_Identity, ActivationFunction
 if TYPE_CHECKING:
     from backpropex.layer import Layer
 from backpropex.edge import Edge
-
-def null_generator[T](t: type[T]) -> Generator[T, None, None]:
-    """A generator that does nothing."""
-    return (cast(T, e) for e in ())
 
 class Node:
     """
@@ -75,24 +72,21 @@ class Node:
         return self.layer.set_value(self.idx, value)
 
     @property
-    def edges(self) -> Generator['Edge', None, None]:
-        """The edges connected to this node."""
-        yield from self.edges_from
-        yield from self.edges_to
-
-    @property
-    def edges_from(self) -> Generator['Edge', None, None]:
+    def edges_from(self) -> Sequence[Edge]:
         """The edges from this node."""
         if hasattr(self.layer, 'edges_from'):
-            return (cast('Edge', e) for e in self.layer.edges_from[self.idx, :] if e is not None)
-        return null_generator(Edge)
+            ar = self.layer.edges_from[self.idx, :]
+            return cast(Sequence[Edge], ar[ar != None]) # type: ignore
+        return []
 
     @property
-    def edges_to(self) -> Generator['Edge', None, None]:
+    def edges_to(self) -> Sequence[Edge]:
         """The edges to this node."""
+
         if hasattr(self.layer, 'edges_to'):
-            return (cast('Edge', e) for e in self.layer.edges_to[self.idx, :] if e is not None)
-        return null_generator(Edge)
+            ar = self.layer.edges_to[self.idx, :]
+            return cast(Sequence[Edge], ar[ar != None]) # type: ignore
+        return []
 
     @property
     def activation(self) -> ActivationFunction:

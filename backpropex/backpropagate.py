@@ -2,7 +2,8 @@
 Backpropagate the gradient through the network.
 """
 
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 from backpropex.protocols import BackpropagateProtocol, TrainProtocol
 from backpropex.steps import StepType, TrainBackwardStepResult
 from backpropex.types import TrainingProgress, TrainingItem

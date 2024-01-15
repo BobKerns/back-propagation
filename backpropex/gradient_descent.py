@@ -2,7 +2,8 @@
 A module to perform gradient descent on a neural network.
 """
 
-from typing import Any, Generator, Optional
+from collections.abc import Generator
+from typing import Any, Optional
 from backpropex.steps import StepType, TrainOptimizeStepResult
 from backpropex.types import TrainingProgress
 from backpropex.protocols import NetProtocol, OptimizerProtocol

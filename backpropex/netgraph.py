@@ -2,10 +2,12 @@
     This file contains the code for the NetGraph class. The NetGraph class is responsible for drawing the network graph.
 """
 
+from collections.abc import Generator, Sequence
+from typing import Optional, Any, cast, overload
+import math
+
 from colorsys import hsv_to_rgb, rgb_to_hsv
 from functools import cached_property
-from typing import Generator, Optional, Sequence, Any, cast, overload
-import math
 
 from matplotlib import pyplot as plt, colormaps
 from matplotlib.axes import Axes

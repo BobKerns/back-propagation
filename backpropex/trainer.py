@@ -6,7 +6,8 @@ data set to train the network.
 """
 
 from contextlib import contextmanager
-from typing import Any, Generator, Optional
+from collections.abc import Generator
+from typing import Any, Optional
 from random import shuffle
 
 import numpy as np

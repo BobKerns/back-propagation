@@ -9,8 +9,12 @@ import numpy as np
 from backpropex.protocols import Randomizer
 from backpropex.randomizer import HeEtAl
 
-from backpropex.types import FloatSeq, LayerType, NPFloat1D, NPFloat2D, NPObject2D
-from backpropex.activation import ACT_Identity, ACT_ReLU, ActivationFunction
+from backpropex.types import (
+    FloatSeq, LayerType, NPFloat1D, NPFloat2D, NPObject2D,
+)
+from backpropex.activation import (
+    ACT_Identity, ACT_ReLU, ActivationFunction,
+)
 from backpropex.node import Bias, Hidden, Input, Node, Output
 
 class Layer:

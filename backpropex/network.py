@@ -22,10 +22,10 @@
     other examples you may have seen.
 """
 
+from collections.abc import Iterable, Generator, Callable
 from typing import (
-    Any, Callable, Generator, NamedTuple, Optional, cast,
+    Any, NamedTuple, Optional, cast,
 )
-from collections.abc import Iterable
 from contextlib import contextmanager
 
 import numpy as np

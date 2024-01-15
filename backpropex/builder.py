@@ -2,7 +2,8 @@
 A builder constructs a neural network from a specification.
 """
 
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any, Optional
 import re
 
 import numpy as np

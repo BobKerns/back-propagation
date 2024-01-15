@@ -16,16 +16,17 @@ A few key types are not defined as protocols, and are imported via the
 * LossFunction
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Generator, Callable
 from contextlib import contextmanager
 from typing import (
-    Callable, Literal, Optional, overload,
+    Literal, Optional, overload,
     runtime_checkable, Protocol, TYPE_CHECKING,
-    Any, Generator
+    Any
 )
 
 from backpropex.types import (
-    FloatSeq, NPFloat2D, NPFloat1D, NPObject2D, TrainingData, TrainingProgress, TrainingItem
+    FloatSeq, NPFloat2D, NPFloat1D, NPObject2D,
+    TrainingData, TrainingProgress, TrainingItem,
 )
 from backpropex.steps import (
     EvalStepResultAny,
@@ -37,7 +38,7 @@ from backpropex.steps import (
     StepTypeAny,
     TrainBackwardStepResult,
     TrainOptimizeStepResult,
-    TrainStepResultAny
+    TrainStepResultAny,
 )
 
 if TYPE_CHECKING:

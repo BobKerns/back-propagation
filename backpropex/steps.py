@@ -5,9 +5,10 @@ The various steps that can be taken in the network and their result data.
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal, Optional, TYPE_CHECKING, Sequence
+from collections.abc import Sequence
+from typing import Literal, Optional, TYPE_CHECKING, cast
 
-from backpropex.types import NPFloat1D, TrainingItem
+from backpropex.types import FloatSeq, NPFloat1D, TrainingItem
 
 if TYPE_CHECKING:
     from backpropex.layer import Layer

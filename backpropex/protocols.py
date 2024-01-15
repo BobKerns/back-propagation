@@ -85,7 +85,7 @@ class NetProtocol(EvalProtocol, Protocol):
         ...
 
     @contextmanager
-    def step_active(self, layer: 'Layer', /) -> Generator['Layer', Any, None]:
+    def layer_active(self, layer: 'Layer', /) -> Generator['Layer', Any, None]:
         ...
 
     def filterCheck[R: StepResultAny](

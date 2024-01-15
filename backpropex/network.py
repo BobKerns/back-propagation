@@ -172,7 +172,7 @@ class Network(NetProtocol):
         return NamedTuple(f'{sanitize(self.name)}_{suffix}', fields)
 
     @contextmanager
-    def step_active(self, layer: Layer, /) -> Generator[Layer, Any, None]:
+    def layer_active(self, layer: Layer, /) -> Generator[Layer, Any, None]:
         """
         Set the active layer for the network during a training pass.
         """
@@ -240,9 +240,8 @@ class Network(NetProtocol):
                 with self.filter(self._filter):
                     yield from self.filterCheck(StepType.Initialized,
                                     lambda : InitStepResult(StepType.Initialized))
-                    layer = self.layers[0]
-                    layer.values = input
-                    with self.step_active(layer):
+                    self.input_layer.real_values = input
+                    with self.layer_active(self.input_layer):
                         in_tuple = self.input_type(*input)
                         yield from self.filterCheck(StepType.Input,
                                         lambda : EvalInputStepResult(StepType.Input,

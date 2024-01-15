@@ -52,7 +52,7 @@ class GradientDescent(OptimizerProtocol):
                 for edge in to_node.edges_to:
                     from_idx = edge.from_.idx
                     from_loss[from_idx] += delta[edge.to_.idx] * edge.weight
-            with net.step_active(to_layer):
+            with net.layer_active(to_layer):
                 yield TrainOptimizeStepResult(StepType.TrainOptimize,
                                          layer=to_layer,
                                             loss = loss * to_layer.gradient * self.learning_rate,

@@ -19,11 +19,14 @@ class Backpropagate(BackpropagateProtocol):
         net = trainer.net
         expected = training_item.expected
         grad = trainer.loss_function.derivative(net.output_array, expected, **kwargs)
-        net.layers[-1].gradient = grad
+        net.output_layer.gradient = grad
         # Backward pass
-        for from_layer, to_layer in net.layer_pairs(reverse=True)
+        for from_layer, to_layer in net.layer_pairs(reverse=True):
+            weighted = to_layer.weights @ to_layer.gradient
+            from_layer.gradient = from_layer.activation_derivative(weighted)
+            with net.layer_active(to_layer):
                 yield TrainBackwardStepResult(StepType.TrainBackward,
-                                            layer=to_layer,
-                                            gradient=to_gradient,
+                                            layer=from_layer,
+                                            gradient=from_layer.gradient,
                                             **training_progress
                                             )

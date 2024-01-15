@@ -36,8 +36,8 @@ class Layer:
 
     # The activation function for nodes in this layer
     _activation_fn: ActivationFunction
-    _activation_fn_ufunc: np.ufunc
-    _activation_fn_derivative: np.ufunc
+    activation_ufunc: np.ufunc
+    activation_derivative: np.ufunc
     @property
     def activation_fn(self):
         return self._activation_fn
@@ -45,12 +45,8 @@ class Layer:
     @activation_fn.setter
     def activation_fn(self, fn: ActivationFunction):
         self._activation_fn = fn
-        self._activation_fn_ufunc = np.frompyfunc(fn, 1, 1)
-        self._activation_fn_derivative = np.frompyfunc(fn.derivative, 1, 1)
-
-    @property
-    def activation_fn_derivative(self):
-        return self._activation_fn_derivative
+        self.activation_ufunc = np.frompyfunc(fn, 1, 1)
+        self.activation_derivative = np.frompyfunc(fn.derivative, 1, 1)
 
     _values: NPFloat1D
 
@@ -131,12 +127,9 @@ class Layer:
             case LayerType.Output:
                 return self.nodes
 
-    def activation(self, values: NPFloat1D, /) -> NPFloat1D:
-        """The values of the activation function for the nodes in this layer."""
-        return self._activation_fn_ufunc(values)
 
     @property
-    def values(self):
+    def real_values(self):
         """The values of the nodes in this layer."""
         match self.layer_type:
             case LayerType.Input | LayerType.Hidden:
@@ -144,12 +137,27 @@ class Layer:
             case LayerType.Output:
                 return self._values
 
+    @real_values.setter
+    def real_values(self, values: FloatSeq):
+        """ Set the values of the nodes in this layer."""
+        match self.layer_type:
+            case LayerType.Input | LayerType.Hidden:
+                self._values[1:] = values
+            case LayerType.Output:
+                self._values = np.array(values, dtype=np.float_)
+
+    @property
+    def values(self):
+        """The values of the nodes in this layer."""
+        return self._values
+
     @values.setter
     def values(self, values: FloatSeq):
         """ Set the values of the nodes in this layer."""
         match self.layer_type:
             case LayerType.Input | LayerType.Hidden:
-                self._values[1:] = values
+                # Don't set bias node
+                self._values[1:] = np.array(values[1:], dtype=np.float_)
             case LayerType.Output:
                 self._values = np.array(values, dtype=np.float_)
 

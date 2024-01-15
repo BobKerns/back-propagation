@@ -116,6 +116,9 @@ class EvalInputStepResult(EvalStepResult[Literal[StepType.Input]],
 class EvalForwardStepResult(EvalStepResult[Literal[StepType.Forward]],
                             LayerStepResult[Literal[StepType.Forward]]):
     values: Sequence[float]
+    def __init__(self, type: StepType, values: FloatSeq, layer: 'Layer'):
+        super().__init__(type, layer=layer)
+        self.values = cast(Sequence[float], values)
 
 @dataclass
 class EvalOutputStepResult(EvalStepResult[Literal[StepType.Output]],

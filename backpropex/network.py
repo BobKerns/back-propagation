@@ -111,16 +111,14 @@ class Network(NetProtocol):
             self._trace = make(trace, Trace)
 
         # Set weights
-        for (prev_layer, next_layer) in zip(self.layers[:-1], self.layers[1:]):
+        for prev_layer, next_layer in self.layer_pairs():
             prevCount = len(prev_layer.nodes)
             if next_layer.layer_type == LayerType.Output:
                 nextCount = len(next_layer.nodes)
             else:
                 nextCount = len(next_layer.nodes)
             w = self.randomizer((prevCount, nextCount))
-            for (nidx, node) in enumerate(next_layer.nodes):
-                for (pidx, edge) in enumerate(node.edges_to):
-                    edge.weight = w[pidx][nidx]
+            next_layer.weights = w
 
         self.max_layer_size = max(len(layer) for layer in self.layers)
         maxid = 0
@@ -245,34 +243,23 @@ class Network(NetProtocol):
                         in_tuple = self.input_type(*input)
                         yield from self.filterCheck(StepType.Input,
                                         lambda : EvalInputStepResult(StepType.Input,
-                                                                     layer=layer,
+                                                                     layer=self.input_layer,
                                                                      input=in_tuple))
-                    for layer in self.layers[1:]:
-                        with self.step_active(layer):
-                            for node in layer.real_nodes:
-                                value = sum(
-                                    (
-                                        edge.weight * edge.from_.value
-                                        for edge in node.edges_to
-                                        ))
-                                node.value = node.activation(value)
-                            def mk_forward():
-                                return EvalForwardStepResult(StepType.Forward,
-                                                            layer=layer,
-                                                            values=tuple(node.value
-                                                                         for node in layer.real_nodes
-                                                                         ))
-                            def mk_output():
-                                return EvalOutputStepResult(StepType.Output,
-                                                            layer=self.output_layer,
-                                                            output=self.output)
-                            def mk_step[R: StepResultAny]() :
-                                match(layer.layer_type):
-                                    case LayerType.Output:
-                                        return StepType.Output, mk_output
-                                    case _:
-                                        return StepType.Forward, mk_forward
-                            yield from self.filterCheck(*mk_step())
+                    for l_from, l_to in self.layer_pairs():
+                        with self.layer_active(l_to):
+                            l_to.values = l_to.activation_ufunc(l_from.values @ l_to.weights)
+                            match (l_to.layer_type):
+                                case LayerType.Output:
+                                    out_tuple = self.output_type(*l_to.values)
+                                    yield from self.filterCheck(StepType.Output,
+                                                    lambda : EvalOutputStepResult(StepType.Output,
+                                                                                 layer=l_to,
+                                                                                 output=out_tuple))
+                                case _:
+                                    yield from self.filterCheck(StepType.Forward,
+                                                    lambda : EvalForwardStepResult(StepType.Forward,
+                                                                                   layer=l_to,
+                                                                                   values=l_to.real_values))
 
     # For use by the builder
     class Context(BuilderContext):
@@ -408,8 +395,8 @@ class Network(NetProtocol):
     def layer_pairs(self, reverse: bool = False) -> Generator[tuple['Layer', 'Layer'], None, None]:
         if reverse:
             yield from zip(
-                reversed(self.layers[1:]),
-                reversed(self.layers[:-1]))
+                reversed(self.layers[:-1]),
+                reversed(self.layers[1:]))
         else:
             yield from zip(
                 self.layers[:-1],

@@ -145,6 +145,9 @@ class NetProtocol(EvalProtocol, Protocol):
     def hidden_layers(self) -> tuple['Layer', ...]:
         ...
 
+    def layer_pairs(self, reverse: bool = False) -> Generator[tuple['Layer', 'Layer'], None, None]:
+        ...
+
     def __getitem__(self, idx: int) -> 'Layer':
         ...
 

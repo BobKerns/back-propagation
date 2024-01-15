@@ -405,6 +405,16 @@ class Network(NetProtocol):
         """The hidden layers of this network."""
         return tuple(self.layers[1:-1])
 
+    def layer_pairs(self, reverse: bool = False) -> Generator[tuple['Layer', 'Layer'], None, None]:
+        if reverse:
+            yield from zip(
+                reversed(self.layers[1:]),
+                reversed(self.layers[:-1]))
+        else:
+            yield from zip(
+                self.layers[:-1],
+                self.layers[1:])
+
     def __getitem__(self, idx: int):
         """Get a layer by index."""
         return self.layers[idx]

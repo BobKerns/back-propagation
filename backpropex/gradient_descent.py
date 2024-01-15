@@ -34,8 +34,7 @@ class GradientDescent(OptimizerProtocol):
             ...
         output = net.output_layer
         output.loss.fill(loss/len(output.loss))
-        for from_layer, to_layer in zip(reversed(net.layers[0:-1]),
-                                        reversed(net.layers[1:])):
+        for from_layer, to_layer in  net.layer_pairs(reverse=True):
             to_loss = to_layer.loss
             from_loss = from_layer.loss
             from_loss.fill(0.0)
